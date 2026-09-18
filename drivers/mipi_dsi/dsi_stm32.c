@@ -45,6 +45,7 @@ struct mipi_dsi_stm32_data {
 	DSI_PLLInitTypeDef pll_init;
 	uint32_t lane_clk_khz;
 	uint32_t pixel_clk_khz;
+	uint8_t puuwai_cmd_lpm;
 };
 
 #if DT_HAS_COMPAT_STATUS_OKAY(st_stm32u5_mipi_dsi)
@@ -278,6 +279,75 @@ static int mipi_dsi_stm32_set_colorcoding(uint32_t pixfmt, uint32_t *colorcoding
 	return 0;
 }
 
+static int puuwai_dsi_select_transport(const struct device *dev, bool low_power)
+{
+	struct mipi_dsi_stm32_data *data = dev->data;
+	uint8_t wanted = low_power ? 1U : 2U;
+	uint32_t lp = low_power ? 1U : 0U;
+	DSI_LPCmdTypeDef cmd = {
+		.LPGenShortWriteNoP = lp ? DSI_LP_GSW0P_ENABLE : DSI_LP_GSW0P_DISABLE,
+		.LPGenShortWriteOneP = lp ? DSI_LP_GSW1P_ENABLE : DSI_LP_GSW1P_DISABLE,
+		.LPGenShortWriteTwoP = lp ? DSI_LP_GSW2P_ENABLE : DSI_LP_GSW2P_DISABLE,
+		.LPGenShortReadNoP = lp ? DSI_LP_GSR0P_ENABLE : DSI_LP_GSR0P_DISABLE,
+		.LPGenShortReadOneP = lp ? DSI_LP_GSR1P_ENABLE : DSI_LP_GSR1P_DISABLE,
+		.LPGenShortReadTwoP = lp ? DSI_LP_GSR2P_ENABLE : DSI_LP_GSR2P_DISABLE,
+		.LPGenLongWrite = lp ? DSI_LP_GLW_ENABLE : DSI_LP_GLW_DISABLE,
+		.LPDcsShortWriteNoP = lp ? DSI_LP_DSW0P_ENABLE : DSI_LP_DSW0P_DISABLE,
+		.LPDcsShortWriteOneP = lp ? DSI_LP_DSW1P_ENABLE : DSI_LP_DSW1P_DISABLE,
+		.LPDcsShortReadNoP = lp ? DSI_LP_DSR0P_ENABLE : DSI_LP_DSR0P_DISABLE,
+		.LPDcsLongWrite = lp ? DSI_LP_DLW_ENABLE : DSI_LP_DLW_DISABLE,
+		.LPMaxReadPacket = lp ? DSI_LP_MRDP_ENABLE : DSI_LP_MRDP_DISABLE,
+		.AcknowledgeRequest = DSI_ACKNOWLEDGE_DISABLE,
+	};
+
+	if (data->puuwai_cmd_lpm == wanted) {
+		return 0;
+	}
+	if (HAL_DSI_ConfigCommand(&data->hdsi, &cmd) != HAL_OK) {
+		LOG_ERR("Select DSI command transport failed");
+		return -EIO;
+	}
+	data->puuwai_cmd_lpm = wanted;
+	return 0;
+}
+
+static int puuwai_dsi_attach_command_mode(const struct device *dev, uint8_t channel,
+					  const struct mipi_dsi_device *mdev)
+{
+	struct mipi_dsi_stm32_data *data = dev->data;
+	DSI_CmdCfgTypeDef cfg = {
+		.VirtualChannelID = channel,
+		/* LTDC is not used; CommandSize bounds only adapted-command writes. */
+		.CommandSize = mdev->timings.hactive,
+		.TearingEffectSource = DSI_TE_DSILINK,
+		.TearingEffectPolarity = DSI_TE_RISING_EDGE,
+		.HSPolarity = data->vid_cfg.HSPolarity,
+		.VSPolarity = data->vid_cfg.VSPolarity,
+		.DEPolarity = data->vid_cfg.DEPolarity,
+		.VSyncPol = DSI_VSYNC_FALLING,
+		.AutomaticRefresh = DSI_AR_DISABLE,
+		.TEAcknowledgeRequest = DSI_TE_ACKNOWLEDGE_DISABLE,
+	};
+
+	if (mipi_dsi_stm32_set_colorcoding(mdev->pixfmt, &cfg.ColorCoding) < 0) {
+		LOG_ERR("MIPI PIXFMT not supported by the DSI host");
+		return -ENOTSUP;
+	}
+	if (HAL_DSI_ConfigAdaptedCommandMode(&data->hdsi, &cfg) != HAL_OK) {
+		LOG_ERR("Setup DSI command mode failed");
+		return -EIO;
+	}
+	data->puuwai_cmd_lpm = 0U;
+	if (puuwai_dsi_select_transport(dev, (mdev->mode_flags & MIPI_DSI_MODE_LPM) != 0U) < 0) {
+		return -EIO;
+	}
+	if (HAL_DSI_Start(&data->hdsi) != HAL_OK) {
+		LOG_ERR("Start DSI host failed");
+		return -EIO;
+	}
+	return 0;
+}
+
 static int mipi_dsi_stm32_attach(const struct device *dev, uint8_t channel,
 				 const struct mipi_dsi_device *mdev)
 {
@@ -287,8 +357,7 @@ static int mipi_dsi_stm32_attach(const struct device *dev, uint8_t channel,
 	HAL_StatusTypeDef ret;
 
 	if (!(mdev->mode_flags & MIPI_DSI_MODE_VIDEO)) {
-		LOG_ERR("DSI host supports video mode only!");
-		return -ENOTSUP;
+		return puuwai_dsi_attach_command_mode(dev, channel, mdev);
 	}
 
 	vcfg->VirtualChannelID = channel;
@@ -377,6 +446,10 @@ static ssize_t mipi_dsi_stm32_transfer(const struct device *dev, uint8_t channel
 	uint32_t param1 = 0;
 	uint32_t param2 = 0;
 	ssize_t len;
+
+	if (puuwai_dsi_select_transport(dev, (msg->flags & MIPI_DSI_MSG_USE_LPM) != 0U) < 0) {
+		return -EIO;
+	}
 
 	switch (msg->type) {
 	case MIPI_DSI_DCS_READ:

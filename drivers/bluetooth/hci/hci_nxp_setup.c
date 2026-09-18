@@ -1,3 +1,6 @@
+
+#define PUUWAI_BT_MANAGE_SDIO_RESET (DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) && !(IS_ENABLED(CONFIG_BOARD_PUUWAI_H745) && IS_ENABLED(CONFIG_PUUWAI_RADIO_MODULE)))
+#define PUUWAI_BT_MANAGE_W_DISABLE (DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios) && !(IS_ENABLED(CONFIG_BOARD_DK_H747) && IS_ENABLED(CONFIG_PUUWAI_RADIO_MODULE)))
 /*
  * Copyright 2024-2026 NXP
  *
@@ -57,12 +60,12 @@ static const struct device *uart_dev = DEVICE_DT_GET(DT_INST_GPARENT(0));
 #define bt_nxp_set_calibration_data_annex100() 0
 #endif
 
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios)
+#if PUUWAI_BT_MANAGE_SDIO_RESET
 struct gpio_dt_spec sdio_reset = GPIO_DT_SPEC_GET(DT_DRV_INST(0), sdio_reset_gpios);
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) */
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
+#endif /* PUUWAI_BT_MANAGE_SDIO_RESET */
+#if PUUWAI_BT_MANAGE_W_DISABLE
 struct gpio_dt_spec w_disable = GPIO_DT_SPEC_GET(DT_DRV_INST(0), w_disable_gpios);
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios) */
+#endif /* PUUWAI_BT_MANAGE_W_DISABLE */
 
 struct nxp_ctlr_dev_data {
 	uint32_t primary_speed;
@@ -1186,8 +1189,8 @@ static void bt_nxp_ctlr_uart_isr(const struct device *unused, void *user_data)
 	}
 }
 
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) ||                                          \
-	DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
+#if PUUWAI_BT_MANAGE_SDIO_RESET ||                                          \
+	PUUWAI_BT_MANAGE_W_DISABLE
 /**
  * @brief Initialize power control GPIOs for Bluetooth controller
  *
@@ -1200,7 +1203,7 @@ static int bt_nxp_init_power_gpios(void)
 {
 	int err;
 
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios)
+#if PUUWAI_BT_MANAGE_SDIO_RESET
 	/* Check BT REG_ON gpio instance */
 	if (!gpio_is_ready_dt(&sdio_reset)) {
 		LOG_ERR("Error: failed to configure sdio_reset %s pin %d", sdio_reset.port->name,
@@ -1220,9 +1223,9 @@ static int bt_nxp_init_power_gpios(void)
 	if (err) {
 		return err;
 	}
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) */
+#endif /* PUUWAI_BT_MANAGE_SDIO_RESET */
 
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
+#if PUUWAI_BT_MANAGE_W_DISABLE
 	/* Check BT REG_ON gpio instance */
 	if (!gpio_is_ready_dt(&w_disable)) {
 		LOG_ERR("Error: failed to configure w_disable %s pin %d", w_disable.port->name,
@@ -1242,24 +1245,24 @@ static int bt_nxp_init_power_gpios(void)
 	if (err) {
 		return err;
 	}
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios) */
+#endif /* PUUWAI_BT_MANAGE_W_DISABLE */
 
 	/* Wait for reset done */
 	k_sleep(K_MSEC(100));
 
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios)
+#if PUUWAI_BT_MANAGE_SDIO_RESET
 	err = gpio_pin_set_dt(&sdio_reset, 1);
 	if (err) {
 		return err;
 	}
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) */
+#endif /* PUUWAI_BT_MANAGE_SDIO_RESET */
 
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
+#if PUUWAI_BT_MANAGE_W_DISABLE
 	err = gpio_pin_set_dt(&w_disable, 1);
 	if (err) {
 		return err;
 	}
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios) */
+#endif /* PUUWAI_BT_MANAGE_W_DISABLE */
 	return 0;
 }
 #endif /* DT_NODE_HAS_PROP sdio_reset_gpios || w_disable_gpios */
@@ -1285,8 +1288,8 @@ static int bt_nxp_ctlr_init(bool is_ir_req)
 	uart_dev_data.secondary_flowcontrol =
 		(bool)DT_PROP_OR(DT_DRV_INST(0), fw_download_secondary_flowcontrol, false);
 
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) ||                                          \
-	DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
+#if PUUWAI_BT_MANAGE_SDIO_RESET ||                                          \
+	PUUWAI_BT_MANAGE_W_DISABLE
 	bool power_reset = !is_ir_req;
 
 	if (IS_ENABLED(CONFIG_BT_HCI_NXP_IR_ENABLE_PDN_TOGGLE)) {
@@ -1841,4 +1844,55 @@ int bt_h4_vnd_setup(const struct device *dev, const struct bt_hci_setup_params *
 	}
 
 	return 0;
+}
+
+/* Driver-owned firmware latch; physical rails are controlled by the board bridge. */
+int puuwai_iw612_bt_closed(void)
+{
+ return fw_upload.hci_opened ? -EBUSY : 0;
+}
+
+/* Dedicated reset is asserted before the platform can remove shared power.
+ * GPIO_OUTPUT_LOW uses physical low, independent of active-low flags.
+ */
+int puuwai_iw612_bt_prepare_power_off(void)
+{
+#ifndef PUUWAI_IW612_EXPERIMENTAL_COLD_RESTART
+ return -ENOTSUP;
+#else
+ int ret;
+ if (fw_upload.hci_opened) { return -EBUSY; }
+#if PUUWAI_BT_MANAGE_SDIO_RESET
+ ret = gpio_pin_configure_dt(&sdio_reset, GPIO_OUTPUT_LOW);
+ if (ret != 0) { return ret; }
+#endif
+#if PUUWAI_BT_MANAGE_W_DISABLE
+ ret = gpio_pin_configure_dt(&w_disable, GPIO_OUTPUT_LOW);
+ if (ret != 0) { return ret; }
+#endif
+#if IS_ENABLED(CONFIG_BOARD_PUUWAI_H745)
+ /* PB9/PG15 host/device wake naming disagrees between board and netlist.
+  * Disable the interrupt and use input/no-pull until hardware is audited. */
+ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_NXP_CTRL_WAKE_ON_BT),
+              "H745 wakeup-bt host/device mapping requires board audit");
+ const struct gpio_dt_spec device_wake = GPIO_DT_SPEC_GET(DT_NODELABEL(bt_device_wake), gpios);
+ ret = gpio_pin_interrupt_configure_dt(&device_wake, GPIO_INT_DISABLE);
+ if (ret != 0) { return ret; }
+ ret = gpio_pin_configure(device_wake.port, device_wake.pin, GPIO_INPUT);
+ if (ret != 0) { return ret; }
+#endif
+ return 0;
+#endif
+}
+
+int puuwai_iw612_bt_prepare_cold_start(void)
+{
+#ifndef PUUWAI_IW612_EXPERIMENTAL_COLD_RESTART
+ return -ENOTSUP;
+#else
+ if (fw_upload.hci_opened) { return -EBUSY; }
+ fw_upload.is_setup_done = false;
+ fw_upload.is_ir_request = false;
+ return 0;
+#endif
 }

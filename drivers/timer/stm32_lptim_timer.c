@@ -78,7 +78,7 @@ static uint32_t lptim_clock_freq = CONFIG_STM32_LPTIM_CLOCK;
 static uint32_t lptim_clock_presc = DT_PROP(LPTIM_SYSTIMER_NODE, st_prescaler);
 
 /* Minimum nb of clock cycles to have to set autoreload register correctly */
-#define LPTIM_GUARD_VALUE 2
+#define LPTIM_GUARD_VALUE 4
 
 /* A 32bit value cannot exceed 0xFFFFFFFF/LPTIM_TIMEBASE counting cycles.
  * This is for example about of 65000 x 2000ms when clocked by LSI
@@ -90,6 +90,11 @@ static uint32_t autoreload_next;
 static bool autoreload_ready = true;
 
 static struct k_spinlock lock;
+/* Fractional kernel tick remainder, in count * ticks/second units. M7's
+ * 4 kHz counter can complete non-four-count periods after the ARR guard.
+ * Preserve the fraction across announcements, elapsed() and new deadlines.
+ */
+static uint32_t unannounced_scaled;
 
 #ifdef CONFIG_STM32_LPTIM_STDBY_TIMER
 
@@ -268,12 +273,11 @@ static void lptim_irq_handler(const struct device *unused)
 
 		accumulated_lptim_cnt += autoreload;
 
+		uint64_t scaled = (uint64_t)autoreload * CONFIG_SYS_CLOCK_TICKS_PER_SEC
+			+ unannounced_scaled;
+		uint32_t dticks = scaled / lptim_clock_freq;
+		unannounced_scaled = scaled % lptim_clock_freq;
 		k_spin_unlock(&lock, key);
-
-		/* announce the elapsed time in ms (count register is 16bit) */
-		uint32_t dticks = (autoreload
-				* CONFIG_SYS_CLOCK_TICKS_PER_SEC)
-				/ lptim_clock_freq;
 
 		sys_clock_announce(IS_ENABLED(CONFIG_TICKLESS_KERNEL)
 				? dticks : (dticks > 0));
@@ -313,6 +317,18 @@ static inline uint32_t z_clock_lptim_getcounter(void)
 		lp_time = LL_LPTIM_GetCounter(LPTIM);
 	} while (lp_time != lp_time_prev_read);
 	return lp_time;
+}
+
+/* Called at final PM entry with IRQs masked; never waits for an ISR. */
+bool puuwai_lptim_prepare_stop(void)
+{
+	k_spinlock_key_t key = k_spin_lock(&lock);
+	uint32_t flags = LPTIM->ISR;
+	bool ready = autoreload_ready &&
+		autoreload_next == LL_LPTIM_GetAutoReload(LPTIM) &&
+		!(flags & (LPTIM_ISR_ARROK | LPTIM_ISR_ARRM));
+	k_spin_unlock(&lock, key);
+	return ready;
 }
 
 void sys_clock_set_timeout(uint32_t ticks, bool idle)
@@ -419,7 +435,7 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 	uint32_t autoreload = LL_LPTIM_GetAutoReload(LPTIM);
 
 	if (LL_LPTIM_IsActiveFlag_ARRM(LPTIM)
-	    || ((autoreload - lp_time) < LPTIM_GUARD_VALUE)) {
+	    || lp_time >= autoreload || ((autoreload - lp_time) < LPTIM_GUARD_VALUE)) {
 		/* interrupt happens or happens soon.
 		 * It's impossible to set autoreload value.
 		 */
@@ -431,9 +447,9 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 	 * adjust the next ARR match value to align on Ticks
 	 * from the current counter value to first next Tick
 	 */
-	next_arr = (((lp_time * CONFIG_SYS_CLOCK_TICKS_PER_SEC)
-			/ lptim_clock_freq) + 1) * lptim_clock_freq
-			/ (CONFIG_SYS_CLOCK_TICKS_PER_SEC);
+	next_arr = ((((uint64_t)lp_time * CONFIG_SYS_CLOCK_TICKS_PER_SEC
+			+ unannounced_scaled) / lptim_clock_freq + 1) * lptim_clock_freq
+			- unannounced_scaled) / CONFIG_SYS_CLOCK_TICKS_PER_SEC;
 	next_arr = next_arr + ((uint32_t)(ticks) * lptim_clock_freq)
 			/ CONFIG_SYS_CLOCK_TICKS_PER_SEC;
 	/* if the lptim_clock_freq <  one ticks/sec, then next_arr must be > 0 */
@@ -446,8 +462,9 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 	 * after current lptim to make sure we don't miss
 	 * an autoreload interrupt
 	 */
-	else if (next_arr < (lp_time + LPTIM_GUARD_VALUE)) {
-		next_arr = lp_time + LPTIM_GUARD_VALUE;
+	else if (next_arr < (lp_time + LPTIM_GUARD_VALUE + 1)) {
+		/* Final -1 must preserve the full asynchronous-write guard. */
+		next_arr = lp_time + LPTIM_GUARD_VALUE + 1;
 	}
 	/* with slow lptim_clock_freq, LPTIM_GUARD_VALUE of 1 is enough */
 	next_arr = next_arr - 1;
@@ -489,13 +506,9 @@ uint32_t sys_clock_elapsed(void)
 	k_spinlock_key_t key = k_spin_lock(&lock);
 
 	uint32_t lp_time = sys_clock_lp_time_get();
-
+	uint64_t ret = ((uint64_t)lp_time * CONFIG_SYS_CLOCK_TICKS_PER_SEC
+		+ unannounced_scaled) / lptim_clock_freq;
 	k_spin_unlock(&lock, key);
-
-	/* gives the value of LPTIM counter (ms)
-	 * since the previous 'announce'
-	 */
-	uint64_t ret = ((uint64_t)lp_time * CONFIG_SYS_CLOCK_TICKS_PER_SEC) / lptim_clock_freq;
 
 	return (uint32_t)(ret);
 }

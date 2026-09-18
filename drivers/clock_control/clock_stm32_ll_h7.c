@@ -190,7 +190,11 @@
 #define STM32H7_BUS_CLK_REG	DT_REG_ADDR(DT_NODELABEL(rcc))
 #elif defined(CONFIG_CPU_CORTEX_M4)
 /* Offset to access bus clock registers from M4 core */
-#define STM32H7_BUS_CLK_REG	DT_REG_ADDR(DT_NODELABEL(rcc)) + 0x60
+/* RM0399 Rev3 9.5.10: the common RCC view uses the accessing core_id.
+ * Adding 0x60 redirects CPU2 to the explicit CPU1 allocation registers.
+ * Example AHB3ENR: common +0xD4, CPU1 +0x134, CPU2 +0x194.
+ */
+#define STM32H7_BUS_CLK_REG	DT_REG_ADDR(DT_NODELABEL(rcc))
 #endif
 
 #if IS_ENABLED(STM32_PLL_P_ENABLED)

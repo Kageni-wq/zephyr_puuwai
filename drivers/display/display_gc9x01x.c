@@ -6,6 +6,12 @@
  */
 #define DT_DRV_COMPAT galaxycore_gc9x01x
 
+#if defined(CONFIG_PUUWAI_PANEL_HOOKS)
+/* The Puuwai hardware module owns rails, reset and touch around this
+ * controller, so its panel owner drives the device PM transitions. */
+#include <puuwai/panel.h>
+#endif
+
 #include "display_gc9x01x.h"
 
 #include <zephyr/dt-bindings/display/panel.h>
@@ -318,7 +324,7 @@ static int gc9x01x_exit_sleep(const struct device *dev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_DEVICE
+#if defined(CONFIG_PM_DEVICE) || defined(CONFIG_PUUWAI_PANEL_HOOKS)
 static int gc9x01x_enter_sleep(const struct device *dev)
 {
 	int ret;
@@ -462,9 +468,11 @@ static int gc9x01x_init(const struct device *dev)
 {
 	int ret;
 
-	gc9x01x_hw_reset(dev);
+	ret = gc9x01x_hw_reset(dev);
+	if (ret < 0) { return ret; }
 
-	gc9x01x_display_blanking_on(dev);
+	ret = gc9x01x_display_blanking_on(dev);
+	if (ret < 0) { return ret; }
 
 	ret = gc9x01x_configure(dev);
 	if (ret < 0) {
@@ -588,6 +596,9 @@ static void gc9x01x_get_capabilities(const struct device *dev,
 #ifdef CONFIG_PM_DEVICE
 static int gc9x01x_pm_action(const struct device *dev, enum pm_device_action action)
 {
+#if defined(CONFIG_PUUWAI_PANEL_HOOKS)
+	return puuwai_panel_pm_action(dev, action);
+#else
 	int ret;
 
 	switch (action) {
@@ -603,6 +614,7 @@ static int gc9x01x_pm_action(const struct device *dev, enum pm_device_action act
 	}
 
 	return ret;
+#endif
 }
 #endif /* CONFIG_PM_DEVICE */
 
@@ -640,3 +652,10 @@ static DEVICE_API(display, gc9x01x_api) = {
 			      CONFIG_DISPLAY_INIT_PRIORITY, &gc9x01x_api);
 
 DT_INST_FOREACH_STATUS_OKAY(GC9X01X_INIT)
+
+#if defined(CONFIG_PUUWAI_PANEL_HOOKS)
+/* Controller operations the panel owner calls after a power-loss wake. */
+int puuwai_gc9_reinitialize(const struct device *dev) { return gc9x01x_init(dev); }
+int puuwai_gc9_sleep(const struct device *dev) { return gc9x01x_enter_sleep(dev); }
+int puuwai_gc9_wake(const struct device *dev) { return gc9x01x_exit_sleep(dev); }
+#endif

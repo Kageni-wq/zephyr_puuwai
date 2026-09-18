@@ -14,6 +14,8 @@
 #include <soc.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
 #include <zephyr/drivers/clock_control.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/cache.h>
 
@@ -68,6 +70,7 @@ struct stream {
 };
 
 struct stm32_sai_sub_data {
+	struct k_sem stopped;
 	SAI_HandleTypeDef hsai;
 	DMA_HandleTypeDef hdma;
 	struct stream stream;
@@ -140,8 +143,10 @@ void HAL_SAI_RxCpltCallback(SAI_HandleTypeDef *hsai)
 		goto exit;
 	}
 
+	stream->mem_block = NULL; /* Completed buffer now belongs to the queue. */
 	if (stream->state == I2S_STATE_STOPPING) {
 		stream->state = I2S_STATE_READY;
+		k_sem_give(&sub_data->stopped);
 		LOG_DBG("Stopping RX ...");
 		sai_sub_disable(hsai, stream->i2s_cfg.options);
 		goto exit;
@@ -373,6 +378,7 @@ static int sai_sub_dma_init(const struct device *dev)
 
 static int sai_sub_init(const struct device *dev)
 {
+	k_sem_init(&((struct stm32_sai_sub_data *)dev->data)->stopped, 0, 1);
 	struct stm32_sai_sub_data *sub_data = dev->data;
 	const struct stm32_sai_sub_cfg *sub_cfg = dev->config;
 	struct stream *stream = &sub_data->stream;
@@ -394,13 +400,6 @@ static int sai_sub_init(const struct device *dev)
 				CONFIG_I2S_STM32_SAI_BLOCK_COUNT);
 	if (ret < 0) {
 		LOG_ERR("k_msgq_alloc_init(): <FAILED>, ret: %d", ret);
-		return ret;
-	}
-
-	/* Initialize DMA */
-	ret = sai_sub_dma_init(dev);
-	if (ret < 0) {
-		LOG_ERR("SAI Sub-Block DMA Init <FAILED>, ret: %d", ret);
 		return ret;
 	}
 
@@ -479,6 +478,7 @@ static int stm32_sai_sub_conf(const struct device *dev, enum i2s_dir dir,
 	SAI_HandleTypeDef *hsai = &sub_data->hsai;
 	uint8_t protocol;
 	uint8_t word_size;
+	int ret;
 
 	memcpy(&stream->i2s_cfg, i2s_cfg, sizeof(struct i2s_config));
 
@@ -680,6 +680,16 @@ static int stm32_sai_sub_conf(const struct device *dev, enum i2s_dir dir,
 		return -EIO;
 	}
 
+	/* DMA transfer widths must follow the runtime PCM word size. */
+	stream->dma_cfg.source_data_size = stream->dma_src_size;
+	stream->dma_cfg.dest_data_size = stream->dma_src_size;
+	ret = sai_sub_dma_init(dev);
+	if (ret < 0) {
+		LOG_ERR("SAI Sub-Block DMA Init <FAILED>, ret: %d", ret);
+		stream->state = I2S_STATE_NOT_READY;
+		return ret;
+	}
+
 	stream->state = I2S_STATE_READY;
 
 	/*
@@ -822,6 +832,7 @@ static void queue_drop(const struct device *dev)
 	struct queue_item item;
 
 	if (stream->mem_block != NULL) {
+		k_mem_slab_free(stream->i2s_cfg.mem_slab, stream->mem_block);
 		stream->mem_block = NULL;
 		stream->mem_block_len = 0;
 	}
@@ -903,8 +914,12 @@ static int stm32_sai_sub_trigger(const struct device *dev, enum i2s_dir dir,
 			return -EIO;
 		}
 
-		stream->queue_drop(dev);
-		stream->state = I2S_STATE_READY;
+        ret = dma_stop(stream->dma_dev, stream->dma_channel);
+        if (ret != 0) { irq_unlock(key); return ret; }
+        CLEAR_BIT(sub_data->hsai.Instance->CR1, SAI_xCR1_DMAEN);
+        __HAL_SAI_DISABLE(&sub_data->hsai);
+        stream->queue_drop(dev);
+        stream->state = I2S_STATE_READY;
 
 		irq_unlock(key);
 		break;
@@ -917,8 +932,12 @@ static int stm32_sai_sub_trigger(const struct device *dev, enum i2s_dir dir,
 			irq_unlock(key);
 			return -EIO;
 		}
-		stream->queue_drop(dev);
-		stream->state = I2S_STATE_READY;
+        ret = dma_stop(stream->dma_dev, stream->dma_channel);
+        if (ret != 0) { irq_unlock(key); return ret; }
+        CLEAR_BIT(sub_data->hsai.Instance->CR1, SAI_xCR1_DMAEN);
+        __HAL_SAI_DISABLE(&sub_data->hsai);
+        stream->queue_drop(dev);
+        stream->state = I2S_STATE_READY;
 
 		irq_unlock(key);
 		break;
@@ -927,6 +946,31 @@ static int stm32_sai_sub_trigger(const struct device *dev, enum i2s_dir dir,
 		return -EINVAL;
 	}
 	return 0;
+}
+
+int puuwai_stm32_sai_set_sleeping(const struct device *dev, bool sleeping)
+{
+    const struct stm32_sai_sub_cfg *cfg = dev->config;
+    const struct stm32_sai_sub_data *data = dev->data;
+    if (data->stream.state == I2S_STATE_RUNNING ||
+        data->stream.state == I2S_STATE_STOPPING) { return -EBUSY; }
+    return pinctrl_apply_state(cfg->pincfg,
+                              sleeping ? PINCTRL_STATE_SLEEP : PINCTRL_STATE_DEFAULT);
+}
+
+int puuwai_stm32_sai_finish_capture(const struct device *dev)
+{
+    struct stm32_sai_sub_data *data = dev->data;
+    if (data->stream.state == I2S_STATE_ERROR) {
+        return stm32_sai_sub_trigger(dev, I2S_DIR_RX, I2S_TRIGGER_DROP);
+    }
+    if (data->stream.state == I2S_STATE_READY) { return 0; }
+    k_sem_reset(&data->stopped);
+    int ret = stm32_sai_sub_trigger(dev, I2S_DIR_RX, I2S_TRIGGER_STOP);
+    if (ret != 0) { return ret; }
+    ret = k_sem_take(&data->stopped, K_MSEC(25));
+    if (ret != 0) { return -ETIMEDOUT; }
+    return dma_stop(data->stream.dma_dev, data->stream.dma_channel);
 }
 
 static int sai_init(const struct device *dev)
@@ -962,6 +1006,39 @@ static const struct i2s_config *stm32_sai_sub_conf_get(const struct device *dev,
 	}
 
 	return NULL;
+}
+
+static int puuwai_sai_pm(const struct device *dev, enum pm_device_action action)
+{
+    const struct stm32_sai_cfg *cfg = dev->config;
+    if (action == PM_DEVICE_ACTION_RESUME) { return stm32_sai_clock_en(dev); }
+    if (action == PM_DEVICE_ACTION_SUSPEND) {
+        return clock_control_off(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
+                                 (clock_control_subsys_t)&cfg->sai_ck);
+    }
+    return -ENOTSUP;
+}
+static int puuwai_sai_sub_pm(const struct device *dev, enum pm_device_action action)
+{
+    const struct stm32_sai_sub_cfg *cfg = dev->config;
+    struct stm32_sai_sub_data *data = dev->data;
+    int ret;
+    if (action == PM_DEVICE_ACTION_RESUME) {
+        ret = pm_device_runtime_get(cfg->controller);
+        if (ret < 0) { return ret; }
+        ret = pinctrl_apply_state(cfg->pincfg, PINCTRL_STATE_DEFAULT);
+        if (ret < 0) { (void)pm_device_runtime_put(cfg->controller); }
+        return ret;
+    }
+    if (action == PM_DEVICE_ACTION_SUSPEND) {
+        if (data->stream.state == I2S_STATE_RUNNING ||
+            data->stream.state == I2S_STATE_STOPPING) { return -EBUSY; }
+        __HAL_SAI_DISABLE(&data->hsai);
+        ret = pinctrl_apply_state(cfg->pincfg, PINCTRL_STATE_SLEEP);
+        if (ret < 0 && ret != -ENOENT) { return ret; }
+        return pm_device_runtime_put(cfg->controller);
+    }
+    return -ENOTSUP;
 }
 
 static DEVICE_API(i2s, i2s_stm32_sai_api) = {
@@ -1027,7 +1104,8 @@ static DEVICE_API(i2s, i2s_stm32_sai_api) = {
 		.controller = DEVICE_DT_GET(DT_PARENT(node)),                                      \
 		.dir = COND_CODE_1(DT_DMAS_HAS_NAME(node, tx), (I2S_DIR_TX), (I2S_DIR_RX)),        \
 	};                                                                                         \
-	DEVICE_DT_DEFINE(node, &sai_sub_init, NULL, &sub_data_##node, &sub_cfg_##node,             \
+	PM_DEVICE_DT_DEFINE(node, puuwai_sai_sub_pm); \
+	DEVICE_DT_DEFINE(node, &sai_sub_init, PM_DEVICE_DT_GET(node), &sub_data_##node, &sub_cfg_##node,             \
 			 POST_KERNEL, CONFIG_I2S_INIT_PRIORITY, &i2s_stm32_sai_api);               \
 	K_MSGQ_DEFINE_STATIC_TYPE(queue_##node, struct queue_item,                                 \
 				  CONFIG_I2S_STM32_SAI_BLOCK_COUNT);
@@ -1047,7 +1125,8 @@ static DEVICE_API(i2s, i2s_stm32_sai_api) = {
 		.sai_ck = STM32_DT_INST_CLOCK_INFO_BY_NAME(inst, sai_ck),                          \
 		SAI_KER_CK_INIT(inst)                                                              \
 	};                                                                                         \
-	DEVICE_DT_INST_DEFINE(inst, &sai_init, NULL, NULL, &sai_cfg_##inst, POST_KERNEL,           \
+	PM_DEVICE_DT_INST_DEFINE(inst, puuwai_sai_pm); \
+	DEVICE_DT_INST_DEFINE(inst, &sai_init, PM_DEVICE_DT_INST_GET(inst), NULL, &sai_cfg_##inst, POST_KERNEL,           \
 			      CONFIG_I2S_INIT_PRIORITY, NULL);                                     \
                                                                                                    \
 	DT_INST_FOREACH_CHILD_STATUS_OKAY(inst, SAI_SUB_INIT)

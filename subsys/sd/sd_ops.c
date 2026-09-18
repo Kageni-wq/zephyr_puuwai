@@ -877,16 +877,20 @@ int card_ioctl(struct sd_card *card, uint8_t cmd, void *buf)
 		 */
 		ret = sdmmc_wait_ready(card);
 		break;
-	case DISK_IOCTL_CTRL_DEINIT:
+	case DISK_IOCTL_CTRL_DEINIT: {
+		struct sdhc_io off_io = card->bus_io;
 		/* Ensure card is not busy with data write */
 		ret = sdmmc_wait_ready(card);
 		if (ret < 0) {
 			LOG_WRN("Card busy when powering off");
+			break;
 		}
 		/* Power down the card */
-		card->bus_io.power_mode = SDHC_POWER_OFF;
-		ret = sdhc_set_io(card->sdhc, &card->bus_io);
+		off_io.power_mode = SDHC_POWER_OFF;
+		ret = sdhc_set_io(card->sdhc, &off_io);
+		if (ret == 0) { card->bus_io = off_io; }
 		break;
+	}
 	case DISK_IOCTL_GET_CARD_CID:
 		ret = card_read_cid(card, buf);
 		break;

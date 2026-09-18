@@ -16,6 +16,7 @@
 #include <zephyr/drivers/reset.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/cache.h>
@@ -61,6 +62,8 @@ struct dmic_stm32_dfsdm_filter_osr {
 
 struct dmic_stm32_dfsdm_filter_data {
 	volatile enum dmic_state state;
+	bool parent_held;
+	int fault;
 	DFSDM_Channel_HandleTypeDef *hchannels; /* Active hardware channels */
 	DFSDM_Filter_HandleTypeDef hfilter;
 	struct dmic_stm32_dfsdm_filter_osr osr[2]; /* 0: regular, 1: fast conversion mode */
@@ -391,59 +394,39 @@ static int dmic_stm32_dfsdm_stop(const struct device *dev)
 }
 
 static void dmic_stm32_dfsdm_dma_callback(const struct device *dma_dev, void *user_data,
-					  uint32_t channel, int status)
+                                          uint32_t channel, int status)
 {
-	const struct device *dev = user_data;
-	struct dmic_stm32_dfsdm_filter_data *data = dev->data;
-	void *slab_buf;
-	int ret;
-
-	if (status != DMA_STATUS_BLOCK && status != DMA_STATUS_COMPLETE) {
-		LOG_ERR("DMA Error occurred");
-		return;
-	}
-
-	/* Protect Cache: Invalidate the specific half-buffer so the CPU sees new RAM data */
-	sys_cache_data_invd_range(data->dma_current_buffer, data->dma_half_block_size_in_bytes);
-
-	/* Grab a clean block from the user's mem_slab */
-	ret = k_mem_slab_alloc(data->mem_slab, &slab_buf, K_NO_WAIT);
-	if (ret < 0) {
-		LOG_ERR("Audio slab empty, dropping frame!");
-		return;
-	}
-
-	/* Shift and pack the data */
-	uint32_t num_samples = data->dma_half_block_size_in_bytes / sizeof(int32_t);
-
-	if (data->pcm_width == 16) {
-		int16_t *dst = (int16_t *)slab_buf;
-
-		for (uint32_t i = 0; i < num_samples; i++) {
-			/* Shift right by 16 to extract the MSB 16-bits of the audio */
-			dst[i] = (int16_t)(data->dma_current_buffer[i] >> 16);
-		}
-	} else {
-		int32_t *dst = (int32_t *)slab_buf;
-
-		for (uint32_t i = 0; i < num_samples; i++) {
-			/* Shift right by 8 to extract the 24-bit audio and sign-extend */
-			dst[i] = (data->dma_current_buffer[i] >> 8);
-		}
-	}
-
-	if (data->dma_current_buffer == data->dma_buffer_ptr[0]) {
-		data->dma_current_buffer = data->dma_buffer_ptr[1];
-	} else {
-		data->dma_current_buffer = data->dma_buffer_ptr[0];
-	}
-
-	/* Push completed block to the app queue */
-	ret = k_msgq_put(data->rx_queue, &slab_buf, K_NO_WAIT);
-	if (ret < 0) {
-		k_mem_slab_free(data->mem_slab, slab_buf);
-		LOG_ERR("RX queue full, dropped frame");
-	}
+    const struct device *dev = user_data;
+    struct dmic_stm32_dfsdm_filter_data *data = dev->data;
+    void *buffer;
+    if (data->fault != 0) { return; }
+    if (status != DMA_STATUS_BLOCK && status != DMA_STATUS_COMPLETE) {
+        data->fault = -EIO;
+        data->state = DMIC_STATE_ERROR;
+        return;
+    }
+    /* Select by the hardware event, even when an earlier callback failed. */
+    int32_t *input = data->dma_buffer_ptr[status == DMA_STATUS_BLOCK ? 0 : 1];
+    sys_cache_data_invd_range(input, data->dma_half_block_size_in_bytes);
+    if (k_mem_slab_alloc(data->mem_slab, &buffer, K_NO_WAIT) != 0) {
+        data->fault = -ENOBUFS;
+        data->state = DMIC_STATE_ERROR;
+        return;
+    }
+    uint32_t samples = data->dma_half_block_size_in_bytes / sizeof(int32_t);
+    uint8_t width = DIV_ROUND_UP(data->pcm_width, 8);
+    for (uint32_t i = 0; i < samples; i++) {
+        int64_t sample = input[i] >> 8;
+        if (data->pcm_shift > 0) { sample >>= data->pcm_shift; }
+        else if (data->pcm_shift < 0) { sample *= 1LL << -data->pcm_shift; }
+        dmic_stm32_dfsdm_write_sample((uint8_t *)buffer + i * width, width,
+                                      CLAMP(sample, INT32_MIN, INT32_MAX));
+    }
+    if (k_msgq_put(data->rx_queue, &buffer, K_NO_WAIT) != 0) {
+        k_mem_slab_free(data->mem_slab, buffer);
+        data->fault = -ENOBUFS;
+        data->state = DMIC_STATE_ERROR;
+    }
 }
 
 static int dmic_stm32_dfsdm_start(const struct device *dev)
@@ -499,6 +482,7 @@ static int dmic_stm32_dfsdm_start(const struct device *dev)
 		/* RDMAEN is already set, just trigger the basic software start */
 		hal_ret = HAL_DFSDM_FilterRegularStart(&data->hfilter);
 		if (hal_ret != HAL_OK) {
+			dma_stop(drv_cfg->dma_dev, drv_cfg->dma_channel);
 			LOG_ERR("Failed to start DFSDM filter");
 			return -EIO;
 		}
@@ -530,7 +514,7 @@ static int dmic_stm32_dfsdm_filter_deinit(const struct device *dev)
 	struct dmic_stm32_dfsdm_filter_data *data = dev->data;
 	int ret = 0;
 
-	if (data->state == DMIC_STATE_ACTIVE) {
+	if (data->state == DMIC_STATE_ACTIVE || data->state == DMIC_STATE_ERROR) {
 		ret = dmic_stm32_dfsdm_stop(dev);
 	}
 
@@ -542,7 +526,19 @@ static int dmic_stm32_dfsdm_filter_deinit(const struct device *dev)
 	/* Drop any completed buffers the consumer never read */
 	dmic_stm32_dfsdm_purge_rx_queue(data);
 
-	data->state = DMIC_STATE_UNINIT;
+	if (HAL_DFSDM_FilterGetState(&data->hfilter) != HAL_DFSDM_FILTER_STATE_RESET) {
+        (void)HAL_DFSDM_FilterDeInit(&data->hfilter);
+    }
+    if (HAL_DFSDM_ChannelGetState(data->hchannels) != HAL_DFSDM_CHANNEL_STATE_RESET) {
+        (void)HAL_DFSDM_ChannelDeInit(data->hchannels);
+    }
+    if (data->parent_held) {
+        const struct dmic_stm32_dfsdm_filter_cfg *cfg = dev->config;
+        int result = pm_device_runtime_put(cfg->parent);
+        if (result < 0) { return result; }
+        data->parent_held = false;
+    }
+    data->state = DMIC_STATE_UNINIT;
 
 	return ret;
 }
@@ -555,14 +551,23 @@ static int dmic_stm32_dfsdm_trigger(const struct device *dev, enum dmic_trigger 
 	switch (cmd) {
 	case DMIC_TRIGGER_PAUSE:
 	case DMIC_TRIGGER_STOP:
-		if (data->state == DMIC_STATE_ACTIVE) {
+		if (data->state == DMIC_STATE_ACTIVE || data->state == DMIC_STATE_ERROR) {
 			ret = dmic_stm32_dfsdm_stop(dev);
 			if (ret < 0) {
 				return ret;
 			}
 		}
-		data->state = DMIC_STATE_CONFIGURED;
-		break;
+		ret = pinctrl_apply_state(((const struct dmic_stm32_dfsdm_filter_cfg *)dev->config)->pcfg,
+                                  PINCTRL_STATE_SLEEP);
+        if (ret < 0) { return ret; }
+        if (data->parent_held) {
+            const struct dmic_stm32_dfsdm_filter_cfg *cfg = dev->config;
+            ret = pm_device_runtime_put(cfg->parent);
+            if (ret < 0) { return ret; }
+            data->parent_held = false;
+        }
+        data->state = DMIC_STATE_CONFIGURED;
+        break;
 	case DMIC_TRIGGER_START:
 		if (data->state != DMIC_STATE_CONFIGURED) {
 			return -EIO;
@@ -597,6 +602,7 @@ static int dmic_stm32_dfsdm_read(const struct device *dev, uint8_t stream, void 
 
 	ARG_UNUSED(stream);
 
+	if (data->fault != 0) { return data->fault; }
 	/* Check if we are in a state that can read */
 	if ((data->state != DMIC_STATE_CONFIGURED) && (data->state != DMIC_STATE_ACTIVE) &&
 	    (data->state != DMIC_STATE_PAUSED)) {
@@ -701,7 +707,7 @@ static int dmic_stm32_dfsdm_filter_init(const struct device *dev)
 	return 0;
 }
 
-static int dmic_stm32_dfsdm_configure(const struct device *dev, struct dmic_cfg *cfg)
+static int dmic_stm32_dfsdm_configure_impl(const struct device *dev, struct dmic_cfg *cfg)
 {
 	const struct dmic_stm32_dfsdm_filter_cfg *drv_cfg = dev->config;
 	const struct dmic_stm32_dfsdm_cfg *parent_cfg = drv_cfg->parent->config;
@@ -718,7 +724,7 @@ static int dmic_stm32_dfsdm_configure(const struct device *dev, struct dmic_cfg 
 	uint32_t requested_samples = stream->block_size / (stream->pcm_width / 8);
 	int ret = 0;
 
-	if (data->state == DMIC_STATE_ACTIVE) {
+	if (data->state == DMIC_STATE_ACTIVE || data->state == DMIC_STATE_ERROR) {
 		return -EBUSY;
 	}
 
@@ -876,6 +882,25 @@ static int dmic_stm32_dfsdm_configure(const struct device *dev, struct dmic_cfg 
 	return 0;
 }
 
+static int dmic_stm32_dfsdm_configure(const struct device *dev, struct dmic_cfg *cfg)
+{
+    const struct dmic_stm32_dfsdm_filter_cfg *config = dev->config;
+    struct dmic_stm32_dfsdm_filter_data *data = dev->data;
+    int ret;
+    if (!data->parent_held) {
+        ret = pm_device_runtime_get(config->parent);
+        if (ret < 0) { return ret; }
+        data->parent_held = true;
+    }
+    ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+    if (ret == 0) { ret = dmic_stm32_dfsdm_configure_impl(dev, cfg); }
+    if (ret == 0) { data->fault = 0; }
+    else if (data->state != DMIC_STATE_ACTIVE) {
+        (void)dmic_stm32_dfsdm_filter_deinit(dev);
+    }
+    return ret;
+}
+
 static DEVICE_API(dmic, dmic_stm32_dfsdm_ops) = {
 	.configure = dmic_stm32_dfsdm_configure,
 	.trigger = dmic_stm32_dfsdm_trigger,
@@ -1017,7 +1042,7 @@ static int dmic_stm32_dfsdm_pm_action(const struct device *dev, enum pm_device_a
 					{                                                          \
 						.DmaMode = DISABLE,                                \
 						.FastMode = ENABLE,                                \
-						.Trigger = DFSDM_FILTER_SW_TRIGGER,                \
+						.Trigger = DT_PROP(flt, filter0_sync) ? DFSDM_FILTER_SYNC_TRIGGER : DFSDM_FILTER_SW_TRIGGER,                \
 					},                                                         \
 			},                                                                         \
 	}
@@ -1078,7 +1103,7 @@ static int dmic_stm32_dfsdm_pm_action(const struct device *dev, enum pm_device_a
 		.reset = RESET_DT_SPEC_INST_GET(n),                                                \
 	};                                                                                         \
                                                                                                    \
-	DEVICE_DT_INST_DEFINE(n, dmic_stm32_dfsdm_init, NULL, NULL, &dmic_stm32_dfsdm_cfg_##n,     \
+	DEVICE_DT_INST_DEFINE(n, dmic_stm32_dfsdm_init, PM_DEVICE_DT_INST_GET(n), NULL, &dmic_stm32_dfsdm_cfg_##n,     \
 			      POST_KERNEL, CONFIG_AUDIO_DMIC_INIT_PRIORITY, NULL);                 \
 	DT_INST_FOREACH_CHILD_STATUS_OKAY(n, DMIC_DFSDM_FILTERS_DEFINE)
 

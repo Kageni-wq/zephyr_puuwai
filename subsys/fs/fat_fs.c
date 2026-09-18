@@ -157,6 +157,11 @@ static int fatfs_close(struct fs_file_t *zfp)
 
 	res = f_close(zfp->filep);
 
+	/* VFS retains its mount pointer on failure; keep the FIL/DIR too. */
+	if (res != FR_OK) {
+		return translate_error(res);
+	}
+
 	/* Free file ptr memory */
 	k_mem_slab_free(&fatfs_filep_pool, zfp->filep);
 	zfp->filep = NULL;
@@ -398,6 +403,11 @@ static int fatfs_closedir(struct fs_dir_t *zdp)
 	FRESULT res;
 
 	res = f_closedir(zdp->dirp);
+
+	/* VFS retains its mount pointer on failure; keep the FIL/DIR too. */
+	if (res != FR_OK) {
+		return translate_error(res);
+	}
 
 	/* Free file ptr memory */
 	k_mem_slab_free(&fatfs_dirp_pool, zdp->dirp);

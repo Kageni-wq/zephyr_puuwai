@@ -16,6 +16,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/dt-bindings/input/cst8xx-gesture-codes.h>
 
 LOG_MODULE_REGISTER(cst8xx, CONFIG_INPUT_LOG_LEVEL);
@@ -114,6 +115,7 @@ INPUT_TOUCH_STRUCT_CHECK(struct cst8xx_config);
 
 /** cst8xx data. */
 struct cst8xx_data {
+	atomic_t suspended;
 	/** Device pointer. */
 	const struct device *dev;
 	/** Work queue (for deferred read). */
@@ -198,7 +200,7 @@ static void cst8xx_work_handler(struct k_work *work)
 {
 	struct cst8xx_data *data = CONTAINER_OF(work, struct cst8xx_data, work);
 
-	cst8xx_process(data->dev);
+	if (!atomic_get(&data->suspended)) { cst8xx_process(data->dev); }
 }
 
 #ifdef CONFIG_INPUT_CST8XX_INTERRUPT
@@ -206,18 +208,18 @@ static void cst8xx_isr_handler(const struct device *dev, struct gpio_callback *c
 {
 	struct cst8xx_data *data = CONTAINER_OF(cb, struct cst8xx_data, int_gpio_cb);
 
-	k_work_submit(&data->work);
+	if (!atomic_get(&data->suspended)) { k_work_submit(&data->work); }
 }
 #else
 static void cst8xx_timer_handler(struct k_timer *timer)
 {
 	struct cst8xx_data *data = CONTAINER_OF(timer, struct cst8xx_data, timer);
 
-	k_work_submit(&data->work);
+	if (!atomic_get(&data->suspended)) { k_work_submit(&data->work); }
 }
 #endif
 
-static void cst8xx_chip_reset(const struct device *dev)
+static int cst8xx_chip_reset(const struct device *dev)
 {
 	const struct cst8xx_config *config = dev->config;
 	int ret;
@@ -226,12 +228,14 @@ static void cst8xx_chip_reset(const struct device *dev)
 		ret = gpio_pin_configure_dt(&config->rst_gpio, GPIO_OUTPUT_ACTIVE);
 		if (ret < 0) {
 			LOG_ERR("Could not configure reset GPIO pin (%d)", ret);
-			return;
+			return ret;
 		}
 		k_msleep(CST8XX_RESET_DELAY);
-		gpio_pin_set_dt(&config->rst_gpio, 0);
+		ret = gpio_pin_set_dt(&config->rst_gpio, 0);
+		if (ret < 0) { return ret; }
 		k_msleep(CST8XX_WAIT_DELAY);
 	}
+	return config->rst_gpio.port && !gpio_is_ready_dt(&config->rst_gpio) ? -ENODEV : 0;
 }
 
 static int cst8xx_chip_init(const struct device *dev)
@@ -241,7 +245,8 @@ static int cst8xx_chip_init(const struct device *dev)
 	int ret;
 	uint8_t chip_id;
 
-	cst8xx_chip_reset(dev);
+	ret = cst8xx_chip_reset(dev);
+	if (ret < 0) { return ret; }
 
 	if (!device_is_ready(cfg->i2c.bus)) {
 		LOG_ERR_DEVICE_NOT_READY(cfg->i2c.bus);
@@ -352,7 +357,7 @@ static int cst8xx_apply_profile(const struct cst8xx_config *cfg)
 	return 0;
 }
 
-static int cst8xx_pm_action(const struct device *dev, enum pm_device_action action)
+static int cst8xx_controller_pm_action(const struct device *dev, enum pm_device_action action)
 {
 	int ret;
 	const struct cst8xx_config *cfg = dev->config;
@@ -360,7 +365,8 @@ static int cst8xx_pm_action(const struct device *dev, enum pm_device_action acti
 	/* For some reason the CST816S does not respond to I2C commands after we use the standby
 	 * profile. Workaround for now is to just always reset it before we change power modes.
 	 */
-	cst8xx_chip_reset(dev);
+	ret = cst8xx_chip_reset(dev);
+	if (ret < 0) { return ret; }
 	ret = cst8xx_chip_init(dev);
 	if (ret < 0) {
 		LOG_ERR("Chip init failed during PM action (%d)", ret);
@@ -401,6 +407,36 @@ static int cst8xx_pm_action(const struct device *dev, enum pm_device_action acti
 
 	return 0;
 }
+static int cst8xx_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	struct cst8xx_data *data = dev->data;
+	const struct cst8xx_config *cfg = dev->config;
+	struct k_work_sync sync;
+	int ret;
+	bool was_suspended = atomic_set(&data->suspended, 1);
+#ifdef CONFIG_INPUT_CST8XX_INTERRUPT
+	ret = gpio_pin_interrupt_configure_dt(&cfg->int_gpio, GPIO_INT_DISABLE);
+	if (ret < 0) { atomic_set(&data->suspended, was_suspended); return ret; }
+#else
+	k_timer_stop(&data->timer);
+#endif
+	/* Called only from a sleepable owner queue, never the input/system queue. */
+	(void)k_work_cancel_sync(&data->work, &sync);
+	ret = cst8xx_controller_pm_action(dev, action);
+	if ((ret == 0 && action == PM_DEVICE_ACTION_RESUME) ||
+	    (ret != 0 && !was_suspended)) {
+#ifdef CONFIG_INPUT_CST8XX_INTERRUPT
+		int irq_ret = gpio_pin_interrupt_configure_dt(&cfg->int_gpio, GPIO_INT_EDGE_TO_ACTIVE);
+		if (irq_ret != 0) { return irq_ret; }
+#else
+		k_timer_start(&data->timer, K_MSEC(CONFIG_INPUT_CST8XX_PERIOD_MS),
+			K_MSEC(CONFIG_INPUT_CST8XX_PERIOD_MS));
+#endif
+		atomic_clear(&data->suspended);
+	}
+	return ret;
+}
+
 #endif
 
 /* clang-format off */

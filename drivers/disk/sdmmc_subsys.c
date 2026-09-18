@@ -11,6 +11,7 @@
 
 #include <zephyr/sd/sdmmc.h>
 #include <zephyr/drivers/disk.h>
+#include <zephyr/storage/disk_access.h>
 
 
 enum sd_status {
@@ -101,10 +102,11 @@ static int disk_sdmmc_access_ioctl(struct disk_info *disk, uint8_t cmd, void *bu
 	switch (cmd) {
 	case DISK_IOCTL_CTRL_INIT:
 		return disk_sdmmc_access_init(disk);
-	case DISK_IOCTL_CTRL_DEINIT:
-		/* Card will be uninitialized after DEINIT */
-		data->status = SD_UNINIT;
-		return sdmmc_ioctl(&data->card, DISK_IOCTL_CTRL_DEINIT, NULL);
+	case DISK_IOCTL_CTRL_DEINIT: {
+		int ret = sdmmc_ioctl(&data->card, DISK_IOCTL_CTRL_DEINIT, NULL);
+		if (ret == 0) { data->status = SD_UNINIT; }
+		return ret;
+	}
 	default:
 		return sdmmc_ioctl(&data->card, cmd, buf);
 	}
@@ -152,3 +154,23 @@ static int disk_sdmmc_init(const struct device *dev)
 			NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(DISK_ACCESS_SDMMC_INIT)
+
+#if defined(CONFIG_PUUWAI_SD_HOST_HOOKS)
+/* The power owner excludes concurrent mounts/disk users during this operation.
+ * Never force DEINIT: extra references and failed card readiness retain power. */
+int puuwai_sd_disk_deinit(void)
+{
+	const struct device *dev = DEVICE_DT_GET(DT_NODELABEL(sd_card));
+	const struct sdmmc_config *config = dev->config;
+	struct sdmmc_data *data = dev->data;
+	if (data->disk_info.refcnt > 1U) { return -EBUSY; }
+	if (data->disk_info.refcnt == 0U) { return 0; }
+	return disk_access_ioctl(config->name, DISK_IOCTL_CTRL_DEINIT, NULL);
+}
+
+void puuwai_sd_disk_stopped(void)
+{
+	struct sdmmc_data *data = DEVICE_DT_GET(DT_NODELABEL(sd_card))->data;
+	data->status = SD_UNINIT;
+}
+#endif /* CONFIG_PUUWAI_SD_HOST_HOOKS */

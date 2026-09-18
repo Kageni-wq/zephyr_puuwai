@@ -410,6 +410,7 @@ int nxp_wifi_wlan_event_callback(enum wlan_event_reason reason, void *data)
 	return 0;
 }
 
+#if !defined(CONFIG_PUUWAI_IW612_COLD_LIFECYCLE)
 static int nxp_wifi_cpu_reset(uint8_t enable)
 {
 	int err = 0;
@@ -532,6 +533,8 @@ static int nxp_wifi_cpu_reset(uint8_t enable)
 	return err;
 }
 
+#endif /* !CONFIG_PUUWAI_IW612_COLD_LIFECYCLE */
+
 static int nxp_wifi_wlan_init(void)
 {
 	int status = NXP_WIFI_RET_SUCCESS;
@@ -545,7 +548,12 @@ static int nxp_wifi_wlan_init(void)
 		k_event_init(&s_nxp_wifi_SyncEvent);
 	}
 
+#if defined(CONFIG_PUUWAI_IW612_COLD_LIFECYCLE)
+	/* Shared PWDN and rails are already owned by the platform bridge. */
+	ret = 0;
+#else
 	ret = nxp_wifi_cpu_reset(true);
+#endif
 
 	if ((status == NXP_WIFI_RET_SUCCESS) && (ret == 0)) {
 		ret = wlan_init(wlan_fw_bin, wlan_fw_bin_len);
@@ -2155,6 +2163,9 @@ static void nxp_wifi_sta_init(struct net_if *iface)
 #endif
 	g_mlan.state.interface = WLAN_BSS_TYPE_STA;
 
+#if defined(CONFIG_PUUWAI_IW612_COLD_LIFECYCLE)
+	/* WLAN initialization is deferred to puuwai_nxp_wifi_cold_start(). */
+#else
 #ifndef CONFIG_NXP_WIFI_SOFTAP_SUPPORT
 	int ret;
 
@@ -2171,6 +2182,7 @@ static void nxp_wifi_sta_init(struct net_if *iface)
 			return;
 		}
 	}
+#endif
 #endif
 }
 
@@ -2713,3 +2725,73 @@ NET_DEVICE_INIT_INSTANCE(wifi_nxp_uap, "ua", 1, NULL, NULL, &g_uap,
 			 CONFIG_WIFI_INIT_PRIORITY, &nxp_wifi_uap_apis, ETHERNET_L2,
 			 NET_L2_GET_CTX_TYPE(ETHERNET_L2), NET_ETH_MTU);
 #endif
+
+#if defined(CONFIG_PUUWAI_IW612_COLD_LIFECYCLE)
+BUILD_ASSERT(!IS_ENABLED(CONFIG_NXP_WIFI_SOFTAP_SUPPORT),
+             "Puuwai shared cold lifecycle currently supports STA only");
+BUILD_ASSERT(!IS_ENABLED(CONFIG_WIFI_NM_WPA_SUPPLICANT),
+             "Puuwai cold lifecycle requires the SDK STA connection manager");
+BUILD_ASSERT(!IS_ENABLED(CONFIG_NXP_WIFI_HOST_SLEEP),
+             "Puuwai cold lifecycle does not combine with host sleep");
+/* These helpers are serialized by the hardware-module lifecycle workqueue. */
+extern int puuwai_nxp_wlan_cold_stop(void);
+extern int puuwai_nxp_sdio_cold_stop(void);
+extern int puuwai_nxp_wlan_disconnect(void);
+extern void puuwai_nxp_wlan_cold_started(void);
+static bool puuwai_wifi_cold;
+
+/* Pure host state query: never sends firmware commands from a net event. */
+bool puuwai_iw612_wifi_link_ready(void)
+{
+ enum wlan_connection_state state = WLAN_DISCONNECTED;
+ return s_nxp_wifi_State == NXP_WIFI_STARTED && s_nxp_wifi_StaConnected &&
+        wlan_get_connection_state(&state) == WM_SUCCESS && state == WLAN_CONNECTED;
+}
+
+int puuwai_nxp_wifi_disconnect(void)
+{
+ if (s_nxp_wifi_State != NXP_WIFI_STARTED) { return -EBUSY; }
+ int ret = puuwai_nxp_wlan_disconnect();
+ if (ret != 0) { return ret; }
+ s_nxp_wifi_StaConnected = false;
+ net_if_dormant_on(g_mlan.netif);
+ return 0;
+}
+
+int puuwai_nxp_wifi_cold_stop(void)
+{
+ int ret;
+ if (puuwai_wifi_cold) { return 0; }
+ if (s_nxp_wifi_State != NXP_WIFI_STARTED) { return -EBUSY; }
+ /* Existing NXP reset teardown owns its threads, queues and internal state;
+  * the checked wrapper propagates errors and bounds its explicit waits. */
+ ret = puuwai_nxp_wlan_cold_stop();
+ if (ret != 0) { return ret; }
+ ret = puuwai_nxp_sdio_cold_stop();
+ if (ret != 0) { return ret; }
+ s_nxp_wifi_State = NXP_WIFI_NOT_INITIALIZED;
+ puuwai_wifi_cold = true;
+ return 0;
+}
+
+int puuwai_nxp_wifi_cold_start(void)
+{
+ int ret;
+ if (!puuwai_wifi_cold && s_nxp_wifi_State == NXP_WIFI_STARTED) { return 0; }
+#ifndef PUUWAI_IW612_EXPERIMENTAL_COLD_RESTART
+ if (puuwai_wifi_cold) { return -ENOTSUP; }
+#endif
+ if (s_nxp_wifi_State != NXP_WIFI_NOT_INITIALIZED) { return -EBUSY; }
+ ret = nxp_wifi_wlan_init();
+ if (ret != 0) { return -EIO; }
+ ret = nxp_wifi_wlan_start();
+ if (ret != 0) { return -EIO; }
+ nxp_net_enable_all_networks();
+ wifi_reset_set_state(false);
+ wifi_set_tx_status(WIFI_DATA_RUNNING);
+ wifi_set_rx_status(WIFI_DATA_RUNNING);
+ puuwai_wifi_cold = false;
+ puuwai_nxp_wlan_cold_started();
+ return 0;
+}
+#endif /* CONFIG_PUUWAI_IW612_COLD_LIFECYCLE */

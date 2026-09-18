@@ -81,12 +81,18 @@ struct sdhc_stm32_data {
 	uint32_t sdmmc_clk;            /* Specifies the clock*/
 	uint32_t block_size;           /* Block size for SDMMC data transfer */
 	uint32_t error_code;           /* SD Card Error codes */
+	bool puuwai_admitted;
+	bool puuwai_clock_on;
+	bool puuwai_dirty;
 	bool is_sdio_transfer;         /* Flag to indicate if current transfer is SDIO */
 
 	uint32_t rx_xfer_size; /* SD Rx Transfer size */
 	uint32_t tx_xfer_size; /* SD Tx Transfer size */
 	bool is_multi_block;   /* Flag for multi-block transfers */
 };
+
+static bool puuwai_sd_managed(const struct device *dev);
+static int puuwai_sd_controller_boot(const struct device *dev);
 
 static SDMMC_TypeDef *sdhc_stm32_get_instance(const struct device *dev)
 {
@@ -1568,6 +1574,11 @@ static int sdhc_stm32_request(const struct device *dev, struct sdhc_command *cmd
 		return -EBUSY;
 	}
 
+	if (puuwai_sd_managed(dev) && !dev_data->puuwai_admitted) {
+		k_mutex_unlock(&dev_data->bus_mutex);
+		return -EHOSTDOWN;
+	}
+
 	if (sdhc_stm32_card_busy(dev)) {
 		LOG_ERR("Card is busy");
 		k_mutex_unlock(&dev_data->bus_mutex);
@@ -1693,6 +1704,10 @@ static int sdhc_stm32_set_io(const struct device *dev, struct sdhc_io *ios)
 	/* Prevent the clocks to be stopped during the request */
 	pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
 	k_mutex_lock(&data->bus_mutex, K_FOREVER);
+	if (puuwai_sd_managed(dev) && !data->puuwai_admitted) {
+		res = -EHOSTDOWN;
+		goto end;
+	}
 
 	if ((ios->clock != 0) && (host_io->clock != ios->clock)) {
 		if ((ios->clock > props->f_max) || (ios->clock < props->f_min)) {
@@ -1795,6 +1810,7 @@ static int sdhc_stm32_get_card_present(const struct device *dev)
 
 static int sdhc_stm32_reset(const struct device *dev)
 {
+	int ret = 0;
 	struct sdhc_stm32_data *data = dev->data;
 	SDMMC_TypeDef *instance = sdhc_stm32_get_instance(dev);
 
@@ -1802,6 +1818,10 @@ static int sdhc_stm32_reset(const struct device *dev)
 	/* Prevent the clocks to be stopped during the request */
 	pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
 	k_mutex_lock(&data->bus_mutex, K_FOREVER);
+	if (puuwai_sd_managed(dev) && !data->puuwai_admitted) {
+		ret = -EHOSTDOWN;
+		goto end;
+	}
 
 	/* Resetting Host controller */
 	(void)SDMMC_PowerState_OFF(instance);
@@ -1813,11 +1833,12 @@ static int sdhc_stm32_reset(const struct device *dev)
 	__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
 	data->error_code = SDMMC_ERROR_NONE;
 
+end:
 	k_mutex_unlock(&data->bus_mutex);
 	pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
 	(void)pm_device_runtime_put(dev);
 
-	return 0;
+	return ret;
 }
 
 static void sdhc_stm32_clear_icr_flags(SDMMC_TypeDef *instance)
@@ -1875,6 +1896,7 @@ static int sdhc_stm32_init(const struct device *dev)
 	const struct sdhc_stm32_config *config = dev->config;
 
 	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
+	if (puuwai_sd_managed(dev)) { return puuwai_sd_controller_boot(dev); }
 
 	if (config->sdhi_on_gpio.port != NULL) {
 		if (sdhi_power_on(dev) != 0) {
@@ -1929,6 +1951,38 @@ static DEVICE_API(sdhc, sdhc_stm32_api) = {
 	.reset = sdhc_stm32_reset,
 };
 
+#if defined(CONFIG_PUUWAI_SD_HOST_HOOKS)
+/* Admission, isolation and rail ownership live in the Puuwai hardware module's
+ * drivers/sd_host directory, which supplies this file and its include path. */
+#include "sd_host_controller.inc"
+#else
+static bool puuwai_sd_managed(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	return false;
+}
+
+static int puuwai_sd_controller_boot(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	return -ENOTSUP;
+}
+
+#ifdef CONFIG_PM_DEVICE
+static int puuwai_sd_resume(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	return -ENOTSUP;
+}
+
+static int puuwai_sd_isolate(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	return -ENOTSUP;
+}
+#endif /* CONFIG_PM_DEVICE */
+#endif /* CONFIG_PUUWAI_SD_HOST_HOOKS */
+
 #ifdef CONFIG_PM_DEVICE
 static int sdhc_stm32_suspend(const struct device *dev)
 {
@@ -1956,6 +2010,13 @@ static int sdhc_stm32_suspend(const struct device *dev)
 
 static int sdhc_stm32_pm_action(const struct device *dev, enum pm_device_action action)
 {
+	if (puuwai_sd_managed(dev)) {
+		switch (action) {
+		case PM_DEVICE_ACTION_RESUME: return puuwai_sd_resume(dev);
+		case PM_DEVICE_ACTION_SUSPEND: return puuwai_sd_isolate(dev);
+		default: return -ENOTSUP;
+		}
+	}
 	switch (action) {
 	case PM_DEVICE_ACTION_RESUME:
 		return sdhc_stm32_activate(dev);

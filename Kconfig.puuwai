@@ -1,0 +1,35 @@
+# Copyright (c) 2026 Kagen Aeby
+# SPDX-License-Identifier: Apache-2.0
+
+menu "Puuwai hardware-module integration"
+
+comment "The implementations live in the Puuwai hardware module, which sets these"
+
+config PUUWAI_PANEL_HOOKS
+	bool "GC9x01x lifecycle owned by the Puuwai panel owner"
+	depends on GC9X01X
+	help
+	  The GC9x01x driver delegates device PM to puuwai_panel_pm_action() and
+	  exports its reset, sleep and wake operations, so one owner can sequence
+	  panel rails, controller registers and touch. Without this the driver
+	  keeps its own suspend/resume behavior.
+
+config PUUWAI_SD_HOST_HOOKS
+	bool "SDMMC controller admission owned by the Puuwai SD host"
+	depends on SDHC_STM32_SDMMC
+	help
+	  The STM32 SDHC driver admits requests only while the Puuwai SD host has
+	  power and clocks established, and the SDMMC disk exposes a reference
+	  counted deinitialization for that owner. Without this the drivers behave
+	  as upstream.
+
+config PUUWAI_IW612_COLD_LIFECYCLE
+	bool "IW612 Wi-Fi cold start and stop owned by the Puuwai radio bridge"
+	depends on WIFI_NXP
+	help
+	  The NXP Wi-Fi driver defers WLAN initialization to the platform bridge
+	  that owns the shared IW612 rails and PWDN, instead of resetting the
+	  module itself during net_if initialization. It then requires the cold
+	  lifecycle helpers the hardware module supplies.
+
+endmenu
