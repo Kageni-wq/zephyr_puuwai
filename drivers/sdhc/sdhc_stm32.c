@@ -54,6 +54,9 @@ BUILD_ASSERT((CONFIG_SDHC_BUFFER_ALIGNMENT % sizeof(uint32_t)) == 0U);
 #define SDMMC_WAIT_RX_DBCKEND_FLAGS                                                                \
 	(SDMMC_WAIT_RX_FLAGS | SDMMC_FLAG_DBCKEND)
 
+/* Transfer cleanup must not acknowledge a pending SDIO card interrupt. */
+#define SDHC_STM32_TRANSFER_FLAGS (SDMMC_STATIC_FLAGS & ~SDMMC_FLAG_SDIOIT)
+
 struct sdhc_stm32_config {
 	DEVICE_MMIO_ROM;
 	bool hw_flow_control;              /* flag for enabling hardware flow control */
@@ -73,6 +76,8 @@ struct sdhc_stm32_config {
 struct sdhc_stm32_data {
 	DEVICE_MMIO_RAM;
 	struct k_mutex bus_mutex;      /* Sync between commands */
+	sdhc_interrupt_cb_t interrupt_cb;
+	void *interrupt_user_data;
 	struct sdhc_io host_io;        /* Input/Output host configuration */
 	struct sdhc_host_props props;  /* current host properties */
 	struct k_sem device_sync_sem;  /* Sync between device communication messages */
@@ -369,7 +374,7 @@ static uint32_t sdhc_stm32_convert_block_size(struct sdhc_stm32_data *dev_data)
 static int sdhc_stm32_handle_data_error(SDMMC_TypeDef *instance, uint32_t errorcode,
 					struct sdhc_stm32_data *data)
 {
-	__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+	__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 	data->error_code |= errorcode;
 	if (errorcode == SDMMC_ERROR_DATA_TIMEOUT) {
 		return -ETIMEDOUT;
@@ -684,7 +689,7 @@ static int sdhc_stm32_poll_read_transfer(SDMMC_TypeDef *instance, uint8_t **temp
 
 	if (ret == 0) {
 		/* Clear all the static flags */
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		data->error_code |= SDMMC_ERROR_TIMEOUT;
 		return -ETIMEDOUT;
 	}
@@ -709,7 +714,7 @@ static int sdhc_stm32_poll_write_transfer(SDMMC_TypeDef *instance, const uint8_t
 
 	if (ret == 0) {
 		/* Clear all the static flags */
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		data->error_code |= SDMMC_ERROR_TIMEOUT;
 		return -ETIMEDOUT;
 	}
@@ -729,7 +734,7 @@ static int sdhc_stm32_send_stop_cmd(SDMMC_TypeDef *instance, uint32_t number_of_
 	errorstate = SDMMC_CmdStopTransfer(instance);
 	if (errorstate != SDMMC_ERROR_NONE) {
 		/* Clear all the static flags */
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		data->error_code |= errorstate;
 		return -EIO;
 	}
@@ -772,7 +777,7 @@ static int sdhc_stm32_rw_blocks_poll(struct sdhc_stm32_data *dev_data, struct sd
 		res = sdhc_stm32_set_response(dev_data, instance, cmd);
 	}
 	if (res != 0) {
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		return -EIO;
 	}
 
@@ -862,7 +867,7 @@ static int sdhc_stm32_rw_blocks_dma(struct sdhc_command *cmd, SDMMC_TypeDef *ins
 	}
 	if (res != 0) {
 		/* Clear all the static flags */
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		dev_data->is_multi_block = false;
 		return -EIO;
 	}
@@ -1045,7 +1050,7 @@ static int sdhc_stm32_mmc_read_ext_csd(struct sdhc_stm32_data *dev_data, SDMMC_T
 		res = sdhc_stm32_set_response(dev_data, instance, cmd);
 	}
 	if (res != 0) {
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_DATA_FLAGS);
 		return res;
 	}
@@ -1067,7 +1072,7 @@ static int sdhc_stm32_mmc_read_ext_csd(struct sdhc_stm32_data *dev_data, SDMMC_T
 	       }));
 
 	if (res == 0) {
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		dev_data->error_code |= SDMMC_ERROR_TIMEOUT;
 		return -ETIMEDOUT;
 	}
@@ -1266,7 +1271,7 @@ static int sdhc_stm32_sdio_rw_extended_poll(struct sdhc_command *cmd, SDMMC_Type
 	}
 	if (res != 0) {
 		stm32_reg_modify_bits(&instance->DCTRL, SDMMC_DCTRL_FIFORST, SDMMC_DCTRL_FIFORST);
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_DATA_FLAGS);
 		return -EIO;
 	}
@@ -1310,7 +1315,7 @@ static int sdhc_stm32_sdio_rw_extended_poll(struct sdhc_command *cmd, SDMMC_Type
 	}
 
 	if (res == 0) {
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		dev_data->error_code |= SDMMC_ERROR_TIMEOUT;
 		return -ETIMEDOUT;
 	}
@@ -1360,7 +1365,7 @@ static int sdhc_stm32_sdio_rw_extended_dma(struct sdhc_command *cmd, SDMMC_TypeD
 	}
 	if (res != 0) {
 		stm32_reg_modify_bits(&instance->DCTRL, SDMMC_DCTRL_FIFORST, SDMMC_DCTRL_FIFORST);
-		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+		__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 		__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_DATA_FLAGS);
 		return -EIO;
 	}
@@ -1830,7 +1835,7 @@ static int sdhc_stm32_reset(const struct device *dev)
 	k_msleep(data->props.power_delay);
 
 	/* Clear error flags */
-	__SDMMC_CLEAR_FLAG(instance, SDMMC_STATIC_FLAGS);
+	__SDMMC_CLEAR_FLAG(instance, SDHC_STM32_TRANSFER_FLAGS);
 	data->error_code = SDMMC_ERROR_NONE;
 
 end:
@@ -1868,10 +1873,59 @@ static void sdhc_stm32_clear_icr_flags(SDMMC_TypeDef *instance)
 	}
 }
 
+static int sdhc_stm32_enable_interrupt(const struct device *dev,
+				       sdhc_interrupt_cb_t callback, int sources,
+				       void *user_data)
+{
+	struct sdhc_stm32_data *data = dev->data;
+	SDMMC_TypeDef *instance = sdhc_stm32_get_instance(dev);
+	unsigned int key;
+
+	if ((sources != SDHC_INT_SDIO) || (callback == NULL)) {
+		return -EINVAL;
+	}
+
+	/* The NXP adapter masks this source from its ISR callback. Do not take
+	 * the command mutex here or discard an interrupt latched while masked.
+	 */
+	key = irq_lock();
+	data->interrupt_cb = callback;
+	data->interrupt_user_data = user_data;
+	__SDMMC_OPERATION_ENABLE(instance);
+	__SDMMC_ENABLE_IT(instance, SDMMC_IT_SDIOIT);
+	irq_unlock(key);
+	return 0;
+}
+
+static int sdhc_stm32_disable_interrupt(const struct device *dev, int sources)
+{
+	SDMMC_TypeDef *instance = sdhc_stm32_get_instance(dev);
+	unsigned int key;
+
+	if (sources != SDHC_INT_SDIO) {
+		return -EINVAL;
+	}
+
+	key = irq_lock();
+	__SDMMC_DISABLE_IT(instance, SDMMC_IT_SDIOIT);
+	/* Keep SDIO detection active so a card event remains pending until the
+	 * client finishes servicing the card and enables the source again.
+	 */
+	irq_unlock(key);
+	return 0;
+}
+
 void sdhc_stm32_event_isr(const struct device *dev)
 {
 	struct sdhc_stm32_data *data = dev->data;
 	SDMMC_TypeDef *instance = sdhc_stm32_get_instance(dev);
+
+	if ((instance->STA & instance->MASK & SDMMC_FLAG_SDIOIT) != 0U) {
+		__SDMMC_CLEAR_FLAG(instance, SDMMC_FLAG_SDIOIT);
+		if (data->interrupt_cb != NULL) {
+			data->interrupt_cb(dev, SDHC_INT_SDIO, data->interrupt_user_data);
+		}
+	}
 
 	if (__SDMMC_GET_FLAG(instance, SDMMC_FLAG_DATAEND | SDMMC_FLAG_DCRCFAIL |
 						       SDMMC_FLAG_DTIMEOUT | SDMMC_FLAG_RXOVERR |
@@ -1949,6 +2003,8 @@ static DEVICE_API(sdhc, sdhc_stm32_api) = {
 	.get_card_present = sdhc_stm32_get_card_present,
 	.card_busy = sdhc_stm32_card_busy,
 	.reset = sdhc_stm32_reset,
+	.enable_interrupt = sdhc_stm32_enable_interrupt,
+	.disable_interrupt = sdhc_stm32_disable_interrupt,
 };
 
 #if defined(CONFIG_PUUWAI_SD_HOST_HOOKS)
