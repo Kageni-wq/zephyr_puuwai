@@ -8,6 +8,11 @@ include: base.yaml
 bus: sd
 
 properties:
+  reset-gpios:
+    type: phandle-array
+    description: 'sdhc reset Pins.
+
+      '
   max-current-330:
     type: int
     default: 0

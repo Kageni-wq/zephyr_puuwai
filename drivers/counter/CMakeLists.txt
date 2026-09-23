@@ -79,7 +79,11 @@ zephyr_library_sources_ifdef(CONFIG_COUNTER_SILABS_BURTC counter_silabs_burtc.c)
 zephyr_library_sources_ifdef(CONFIG_COUNTER_SILABS_PROTIMER counter_silabs_protimer.c)
 zephyr_library_sources_ifdef(CONFIG_COUNTER_SILABS_TIMER counter_silabs_timer.c)
 zephyr_library_sources_ifdef(CONFIG_COUNTER_SMARTBOND_TIMER counter_smartbond_timer.c)
-zephyr_library_sources_ifdef(CONFIG_COUNTER_SNPS_DW counter_dw_timer.c)
+if(CONFIG_ALIF_VENDOR)
+  zephyr_library_sources_ifdef(CONFIG_COUNTER_SNPS_DW alif/counter_dw_timer.c)
+else()
+  zephyr_library_sources_ifdef(CONFIG_COUNTER_SNPS_DW counter_dw_timer.c)
+endif()
 zephyr_library_sources_ifdef(CONFIG_COUNTER_TIMER_GD32 counter_gd32_timer.c)
 zephyr_library_sources_ifdef(CONFIG_COUNTER_TIMER_MAX32 counter_max32_timer.c)
 zephyr_library_sources_ifdef(CONFIG_COUNTER_TIMER_RPI_PICO counter_rpi_pico_timer.c)
@@ -95,3 +99,10 @@ zephyr_library_sources_ifdef(CONFIG_COUNTER_XLNX_ZYNQMP_RTC counter_xlnx_zynqmp_
 zephyr_library_sources_ifdef(CONFIG_TIMER_DTMR_CMSDK_APB timer_dtmr_cmsdk_apb.c)
 zephyr_library_sources_ifdef(CONFIG_TIMER_TMR_CMSDK_APB timer_tmr_cmsdk_apb.c)
 # zephyr-keep-sorted-stop
+
+zephyr_library_sources_ifdef(CONFIG_COUNTER_RTC_SNPS_DW         counter_dw_rtc.c)
+zephyr_library_sources_ifdef(CONFIG_COUNTER_ALIF_UTIMER         counter_alif_utimer.c)
+
+if(CONFIG_ALIF_VENDOR)
+  zephyr_library_include_directories(.)
+endif()

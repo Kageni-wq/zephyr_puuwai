@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config ILI9488_ALIF
+	bool "ILI9488 panel on Alif DBI or DSI"
+	default y
+	depends on ALIF_VENDOR && DT_HAS_ILITEK_ILI9488_ALIF_ENABLED
+	select MIPI_DBI if $(dt_compat_on_bus,$(DT_COMPAT_ILITEK_ILI9488_ALIF),mipi-dbi)
+	select MIPI_DSI if $(dt_compat_on_bus,$(DT_COMPAT_ILITEK_ILI9488_ALIF),mipi-dsi)

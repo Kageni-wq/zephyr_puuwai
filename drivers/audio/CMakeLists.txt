@@ -37,3 +37,7 @@ zephyr_library_sources_ifdef(CONFIG_AUDIO_TLV320DAC tlv320dac310x.c)
 if(CONFIG_AUDIO_DMIC_NATIVE_SIM)
   target_sources(native_simulator INTERFACE dmic_native_sim_bottom.c)
 endif()
+
+zephyr_library_sources_ifdef(CONFIG_ALIF_PDM	    	alif_pdm.c)
+
+add_subdirectory_ifdef(CONFIG_WM8904 alif_wm8904)

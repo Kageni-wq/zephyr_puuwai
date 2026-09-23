@@ -30,3 +30,7 @@ zephyr_library_sources_ifdef(CONFIG_USERSPACE i2s_handlers.c)
 if(CONFIG_I2S_NATIVE_SIM)
   target_sources(native_simulator INTERFACE i2s_native_sim_bottom.c)
 endif()
+
+zephyr_library_sources_ifdef(CONFIG_I2S_DW		i2s_dw.c)
+
+add_subdirectory_ifdef(CONFIG_I2S_SYNC i2s_sync)

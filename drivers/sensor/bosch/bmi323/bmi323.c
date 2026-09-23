@@ -22,6 +22,10 @@
 #include "bmi323_i2c.h"
 #endif
 
+#ifdef CONFIG_BMI323_BUS_I3C
+#include "bmi323_i3c.h"
+#endif
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bosch_bmi323);
 
@@ -1332,7 +1336,8 @@ static int bosch_bmi323_init(const struct device *dev)
 #define BMI323_DEVICE_BUS(inst)                                                                    \
 	COND_CODE_1(DT_INST_ON_BUS(inst, spi), (BMI323_DEVICE_SPI_BUS(inst)),                      \
 	(COND_CODE_1(DT_INST_ON_BUS(inst, i2c), (BMI323_DEVICE_I2C_BUS(inst)),                     \
-	(BUILD_ASSERT(0, "Unsupported bus type for BMI323")))))
+	(COND_CODE_1(DT_INST_ON_BUS(inst, i3c), (BMI323_DEVICE_I3C_BUS(inst)),                     \
+	(BUILD_ASSERT(0, "Unsupported bus type for BMI323")))))))
 
 /* RTIO context definition - one per device instance */
 #ifdef CONFIG_SENSOR_ASYNC_API

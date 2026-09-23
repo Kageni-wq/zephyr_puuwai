@@ -30,6 +30,7 @@ source "subsys/logging/Kconfig.template.log_config"
 source "drivers/clock_control/Kconfig.adi_axi_clkgen"
 source "drivers/clock_control/Kconfig.agilex5"
 source "drivers/clock_control/Kconfig.alif"
+source "drivers/clock_control/Kconfig.alif_sdk"
 source "drivers/clock_control/Kconfig.ambiq"
 source "drivers/clock_control/Kconfig.ameba"
 source "drivers/clock_control/Kconfig.arm_scmi"
@@ -84,3 +85,5 @@ source "drivers/clock_control/Kconfig.xec"
 source "drivers/clock_control/Kconfig.rts5817"
 
 endif # CLOCK_CONTROL
+
+source "drivers/clock_control/si570/Kconfig"

@@ -10,6 +10,10 @@ menuconfig DISPLAY
 
 if DISPLAY
 
+source "drivers/display/Kconfig.cdc200"
+source "drivers/display/Kconfig.mw405"
+source "drivers/display/Kconfig.ili9488_alif"
+
 config DISPLAY_INIT_PRIORITY
 	int "Display devices init priority"
 	default 85
@@ -28,6 +32,8 @@ config DISPLAY_COLOR_PALETTE_MAX_SIZE
 	help
 	  Maximum size of color palette in display drivers.
 
+source "drivers/display/Kconfig.mw405"
+source "drivers/display/Kconfig.cdc200"
 source "drivers/display/Kconfig.color_dither"
 
 module = DISPLAY

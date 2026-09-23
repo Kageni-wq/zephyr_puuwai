@@ -45,7 +45,7 @@ config UDC_ENABLE_SOF
 	bool "SOF interrupt processing"
 	help
 	  Enabled SoF interrupts can cause a very high CPU load on high-speed
-	  controllers because the interrupt rate would be 125 µs.
+	  controllers because the interrupt rate would be 125 Âµs.
 
 config UDC_WORKQUEUE
 	bool "Use a dedicate work queue for UDC drivers"
@@ -70,6 +70,7 @@ module-str = usb drv
 source "subsys/logging/Kconfig.template.log_config"
 
 source "drivers/usb/udc/Kconfig.dwc2"
+source "drivers/usb/udc/Kconfig.dwc3"
 source "drivers/usb/udc/Kconfig.nrf"
 source "drivers/usb/udc/Kconfig.kinetis"
 source "drivers/usb/udc/Kconfig.skeleton"

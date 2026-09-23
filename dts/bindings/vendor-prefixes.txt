@@ -135,6 +135,7 @@ canis	Canis Automotive Labs
 canmodule	CAN-module, FOP
 capella	Capella Microsystems, Inc
 cascoda	Cascoda, Ltd.
+cast	CAST, Inc.
 catalyst	Catalyst Semiconductor, Inc.
 cavium	Cavium, Inc.
 cdns	Cadence Design Systems Inc.
@@ -269,6 +270,7 @@ fitipower	Fitipower Integrated Technology Inc.
 flysky	FlySky
 fobe	FoBE Studio
 focaltech	FocalTech Systems Co.,Ltd
+focuslcds	Focus LCDs
 framework	Framework Computer, Inc.
 franzininho	Franzininho
 frida	Shenzhen Frida LCD Co., Ltd.
@@ -733,6 +735,7 @@ telink	Telink Semiconductor
 telit	Telit Cinterion
 tempo	Tempo Semiconductor
 terasic	Terasic Inc.
+tes	Tes Electronic Solutions
 tfc	Three Five Corp
 thine	THine Electronics, Inc.
 thingyjp	thingy.jp
@@ -781,6 +784,7 @@ vamrs	Vamrs Ltd.
 variscite	Variscite Ltd.
 vcc-gnd	VCC-GND Studio
 vdl	Van der Laan b.v.
+verisilicon	VeriSilicon
 via	VIA Technologies, Inc.
 vicharak	Vicharak
 videostrong	Videostrong Technology Co., Ltd.
@@ -796,6 +800,7 @@ vngiotlab	VNGIoTLab
 vocore	VoCore Studio
 voipac	Voipac Technologies s.r.o.
 vot	Vision Optical Technology Co., Ltd.
+vsi	VeriSilicon
 vxt	VXT Ltd
 wand	Wandbord (Technexion)
 waveshare	Waveshare Electronics

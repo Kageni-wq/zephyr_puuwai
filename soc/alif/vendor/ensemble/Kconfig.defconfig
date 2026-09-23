@@ -1,0 +1,25 @@
+if ALIF_VENDOR
+
+choice ETHOS_U_NPU_CONFIG
+	default ETHOS_U55_256 if RTSS_HP
+endchoice
+
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+if SOC_FAMILY_ENSEMBLE
+rsource "*/Kconfig.defconfig"
+endif # SOC_FAMILY_ENSEMBLE
+
+config SDHC_DESCRIPTOR_SECTION
+	string "Alif Non Secure Section Name for SDHC Descriptor"
+	default ".alif_ns" if $(dt_nodelabel_enabled,ns)
+
+config SDHC_DWC_DMA_ADDR_TRANSLATE
+	default y
+
+config I2C_DW_IC_CLK_FREQ_OPTIMIZATION
+	default y if I2C_DW
+
+endif # ALIF_VENDOR

@@ -59,3 +59,12 @@ rsource "Kconfig.wch"
 # zephyr-keep-sorted-stop
 
 endif
+
+config HWINFO_ALIF
+	depends on HWINFO && ALIF_VENDOR
+	bool "ALIF hwinfo"
+	default y
+	depends on SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
+	select HWINFO_HAS_DRIVER
+	help
+	  Enable ALIF hwinfo driver.

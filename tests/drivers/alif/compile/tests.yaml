@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+common:
+  build_only: true
+  tags:
+    - drivers
+    - alif
+tests:
+  drivers.alif.compile.peripherals:
+    platform_allow:
+      - alif_e7_dk/ae722f80f55d5xx/rtss_hp
+      - alif_e7_dk/ae722f80f55d5xx/rtss_he
+  drivers.alif.compile.connectivity:
+    platform_allow:
+      - alif_e7_dk/ae722f80f55d5xx/rtss_hp
+    extra_args:
+      - EXTRA_CONF_FILE="connectivity.conf"
+      - EXTRA_DTC_OVERLAY_FILE="connectivity.overlay"
+  drivers.alif.compile.media:
+    platform_allow:
+      - alif_e7_dk/ae722f80f55d5xx/rtss_hp
+    extra_args:
+      - EXTRA_CONF_FILE="media.conf"
+      - EXTRA_DTC_OVERLAY_FILE="media.overlay"
+  drivers.alif.compile.advanced:
+    platform_allow:
+      - alif_e8_dk/ae822fa0e5597xx0/rtss_hp
+    extra_args:
+      - EXTRA_CONF_FILE="media.conf;advanced.conf"
+      - EXTRA_DTC_OVERLAY_FILE="media.overlay;advanced.overlay"
+  drivers.alif.compile.power_management:
+    platform_allow:
+      - alif_e7_dk/ae722f80f55d5xx/rtss_hp
+    extra_args:
+      - EXTRA_CONF_FILE="pm.conf"
+      - EXTRA_DTC_OVERLAY_FILE="pm.overlay"
+  drivers.alif.compile.bluetooth:
+    platform_allow:
+      - alif_b1_dk/ab1c1f4m51820hh0/rtss_he
+    extra_args:
+      - CONF_FILE=radio.conf
+      - DTC_OVERLAY_FILE=radio.overlay
+  drivers.alif.compile.ieee802154:
+    platform_allow:
+      - alif_b1_dk/ab1c1f4m51820hh0/rtss_he
+    extra_args:
+      - CONF_FILE=ieee802154.conf
+      - DTC_OVERLAY_FILE=ieee802154.overlay
+  drivers.alif.compile.audio:
+    platform_allow:
+      - alif_b1_dk/ab1c1f4m51820hh0/rtss_he
+    extra_args:
+      - CONF_FILE=audio.conf
+      - DTC_OVERLAY_FILE=audio.overlay

@@ -60,3 +60,5 @@ zephyr_library_sources_ifdef(CONFIG_HWINFO_SMARTBOND hwinfo_smartbond.c)
 zephyr_library_sources_ifdef(CONFIG_HWINFO_STM32 hwinfo_stm32.c)
 zephyr_library_sources_ifdef(CONFIG_HWINFO_WCH hwinfo_wch.c)
 # zephyr-keep-sorted-stop
+
+zephyr_library_sources_ifdef(CONFIG_HWINFO_ALIF        hwinfo_alif.c)

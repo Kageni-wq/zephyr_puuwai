@@ -33,6 +33,7 @@ config AUDIO_CODEC_SHELL
 
 module = AUDIO_CODEC
 module-str = audio codec
+source "drivers/audio/Kconfig.dmic_alif"
 source "subsys/logging/Kconfig.template.log_config"
 
 # zephyr-keep-sorted-start
@@ -134,3 +135,5 @@ source "drivers/audio/Kconfig.dmic_stm32"
 endif # AUDIO_DMIC
 
 endif # AUDIO
+
+source "drivers/audio/alif_wm8904/Kconfig"

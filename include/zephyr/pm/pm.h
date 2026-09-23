@@ -99,6 +99,8 @@ struct pm_notifier {
 	 * the substate id.
 	 */
 	bool report_substate;
+	/** Restore shared clocks and domains before device resume callbacks run. */
+	void (*pre_device_resume)(enum pm_state state);
 };
 
 #if defined(CONFIG_PM) || defined(__DOXYGEN__)

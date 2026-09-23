@@ -13,6 +13,7 @@ if MIPI_DSI
 
 module = MIPI_DSI
 module-str = mipi_dsi
+source "drivers/mipi_dsi/Kconfig.dw"
 source "subsys/logging/Kconfig.template.log_config"
 
 config MIPI_DSI_INIT_PRIORITY

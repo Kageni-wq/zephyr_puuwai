@@ -13,6 +13,7 @@ if SENSOR
 
 module = SENSOR
 module-str = sensor
+source "drivers/sensor/qdec_alif/Kconfig"
 source "subsys/logging/Kconfig.template.log_config"
 
 config SENSOR_INIT_PRIORITY

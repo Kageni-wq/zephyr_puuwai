@@ -24,6 +24,7 @@ config DMA_INIT_PRIORITY
 
 module = DMA
 module-str = dma
+source "drivers/dma/Kconfig.dma_alif_event_router"
 source "subsys/logging/Kconfig.template.log_config"
 
 # zephyr-keep-sorted-start

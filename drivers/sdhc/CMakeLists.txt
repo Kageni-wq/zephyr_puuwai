@@ -6,7 +6,11 @@ zephyr_library()
 # zephyr-keep-sorted-start
 zephyr_library_sources_ifdef(CONFIG_CDNS_SDHC sdhc_cdns_ll.c sdhc_cdns.c)
 zephyr_library_sources_ifdef(CONFIG_IMX_USDHC imx_usdhc.c)
-zephyr_library_sources_ifdef(CONFIG_INTEL_EMMC_HOST intel_emmc_host.c)
+if(CONFIG_ALIF_VENDOR)
+  zephyr_library_sources_ifdef(CONFIG_INTEL_EMMC_HOST alif/intel_emmc_host.c)
+else()
+  zephyr_library_sources_ifdef(CONFIG_INTEL_EMMC_HOST intel_emmc_host.c)
+endif()
 zephyr_library_sources_ifdef(CONFIG_MCUX_SDIF mcux_sdif.c)
 zephyr_library_sources_ifdef(CONFIG_RCAR_MMC rcar_mmc.c)
 zephyr_library_sources_ifdef(CONFIG_SAM_HSMCI sam_hsmci.c)
@@ -26,3 +30,9 @@ zephyr_library_sources_ifdef(CONFIG_SDHC_TI_AM654 sdhc_ti_am654.c)
 zephyr_library_sources_ifdef(CONFIG_SPI_SDHC sdhc_spi.c)
 zephyr_library_sources_ifdef(CONFIG_XLNX_SDHC xlnx_sdhc.c)
 # zephyr-keep-sorted-stop
+
+zephyr_library_sources_ifdef(CONFIG_SDHC_DWC sdhc_dwc.c)
+
+if(CONFIG_ALIF_VENDOR)
+  zephyr_library_include_directories(.)
+endif()

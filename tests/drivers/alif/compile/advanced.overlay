@@ -1,0 +1,42 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+&isp {
+	status = "okay";
+	port {
+		isp_ep_in: endpoint { remote-endpoint-label = "cam_isp_ep_out"; };
+	};
+};
+&cam {
+	ports {
+		port@2 {
+			reg = <2>;
+			cam_isp_ep_out: endpoint { remote-endpoint-label = "isp_ep_in"; };
+		};
+	};
+};
+&jpeg0 { status = "okay"; };
+&ethosu0 { status = "okay"; };
+&i3c0 { status = "okay"; };
+
+&ospi0 { status = "okay"; };
+&aps512xxn { status = "okay"; };
+
+&gpio8 { status = "okay"; };
+&i3c0 {
+ bmi323: bmi323@69000003b810431000 {
+  compatible = "bosch,bmi323";
+  reg = <0x69 0x03b8 0x10431000>;
+  assigned-address = <0x0a>;
+  int-gpios = <&gpio8 4 GPIO_ACTIVE_HIGH>;
+ };
+};
+&i2c1 {
+ ov5675: camera@10 {
+  compatible = "ovti,ov5675";
+  reg = <0x10>;
+ };
+};
+
+&i2c1 {
+ hm0360: camera@24 { compatible = "himax,hm0360-alif"; reg = <0x24>; };
+ mt9m114: camera@48 { compatible = "aptina,mt9m114-alif"; reg = <0x48>; };
+};

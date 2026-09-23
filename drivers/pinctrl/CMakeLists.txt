@@ -88,3 +88,5 @@ if(CONFIG_PINCTRL_BFLB)
   zephyr_library_sources_ifdef(CONFIG_SOC_SERIES_BL70XL pinctrl_bflb_bl60x_70x.c)
   zephyr_library_sources_ifdef(CONFIG_SOC_SERIES_BL808 pinctrl_bflb_bl61x_808.c)
 endif()
+
+zephyr_library_sources_ifdef(CONFIG_PINCTRL_ALIF_SDK pinctrl_alif_sdk.c)

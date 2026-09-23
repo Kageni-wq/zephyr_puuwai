@@ -202,6 +202,8 @@ source "drivers/i2c/Kconfig.test"
 source "drivers/i2c/Kconfig.virtio"
 source "drivers/i2c/Kconfig.wch"
 source "drivers/i2c/Kconfig.xilinx_axi"
+source "drivers/i2c/Kconfig.alif"
+source "drivers/i2c/Kconfig.gpio_i2c_mux"
 # zephyr-keep-sorted-stop
 
 config I2C_INIT_PRIORITY

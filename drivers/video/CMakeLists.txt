@@ -92,3 +92,19 @@ if(CONFIG_VIDEO_SW_GENERATOR)
 endif()
 
 zephyr_linker_sources(DATA_SECTIONS video.ld)
+
+zephyr_library_sources_ifdef(CONFIG_VIDEO_ISP_VSI       isp_pico.c)
+zephyr_library_sources_ifdef(CONFIG_VIDEO_ARX3A0	arx3a0.c)
+zephyr_library_sources_ifdef(CONFIG_VIDEO_OV5675	ov5675.c)
+zephyr_library_sources_ifdef(CONFIG_VIDEO_ALIF_CAM      video_alif.c)
+zephyr_library_sources_ifdef(CONFIG_VIDEO_MIPI_CSI2_DW  video_csi_dw.c)
+zephyr_library_sources_ifdef(CONFIG_VIDEO_JPEG_HANTRO_VC9000E jpeg_hantro_vc9000e.c)
+
+if(CONFIG_ALIF_VENDOR)
+  zephyr_library_sources(alif_video_compat.c)
+  zephyr_linker_sources(ROM_SECTIONS alif_video.ld)
+endif()
+
+zephyr_library_sources_ifdef(CONFIG_VIDEO_HM0360_ALIF hm0360_alif.c)
+
+zephyr_library_sources_ifdef(CONFIG_VIDEO_MT9M114_ALIF mt9m114_alif.c)

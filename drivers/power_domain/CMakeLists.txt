@@ -16,3 +16,5 @@ zephyr_library_sources_ifdef(CONFIG_POWER_DOMAIN_SILABS_SIWX91X power_domain_sil
 zephyr_library_sources_ifdef(CONFIG_POWER_DOMAIN_SOC_PM_STATE power_domain_soc_state_change.c)
 zephyr_library_sources_ifdef(CONFIG_POWER_DOMAIN_TISCI power_domain_tisci.c)
 # zephyr-keep-sorted-stop
+
+zephyr_library_sources_ifdef(CONFIG_POWER_DOMAIN_ALIF power_domain_alif.c)

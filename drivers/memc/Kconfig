@@ -33,6 +33,8 @@ source "drivers/memc/Kconfig.smartbond"
 source "drivers/memc/Kconfig.stm32"
 # zephyr-keep-sorted-stop
 
+source "drivers/memc/Kconfig.alif"
+
 module = MEMC
 module-str = memc
 source "subsys/logging/Kconfig.template.log_config"

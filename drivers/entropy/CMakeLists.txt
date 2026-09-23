@@ -59,3 +59,5 @@ zephyr_library_sources_ifdef(CONFIG_ENTROPY_WCH_RNG entropy_wch.c)
 # zephyr-keep-sorted-stop
 
 zephyr_library_link_libraries_ifdef(CONFIG_BUILD_WITH_TFM tfm_api)
+
+zephyr_library_sources_ifdef(CONFIG_ENTROPY_ALIF_RNG           entropy_alif.c)

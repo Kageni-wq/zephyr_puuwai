@@ -127,3 +127,5 @@ comment "Dhara module not available."
 if 0
 osource "modules/*/Kconfig"
 endif
+
+source "modules/Kconfig.alif"

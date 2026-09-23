@@ -15,6 +15,7 @@ if DAC
 
 module = DAC
 module-str = DAC
+source "drivers/dac/Kconfig.alif"
 source "subsys/logging/Kconfig.template.log_config"
 
 config DAC_SHELL

@@ -172,4 +172,6 @@ source "drivers/adc/Kconfig.xmc4xxx"
 
 source "drivers/adc/Kconfig.ads1118"
 
+source "drivers/adc/Kconfig.alif"
+
 endif # ADC

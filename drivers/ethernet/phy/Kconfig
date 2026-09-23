@@ -198,3 +198,11 @@ config PHY_MOTORCOMM_YT8521
 	  This driver supports both YT8521 and YT8531 PHY chips.
 
 endif # "Ethernet PHY Drivers"
+
+config PHY_REALTEK_RTL8201FR
+	bool "Realtek Phy Driver"
+	default y
+	depends on DT_HAS_REALTEK_RTL8201FR_ENABLED
+	depends on MDIO
+	help
+	  Enable Realtek RTL8201FR Ethernet Phy Driver

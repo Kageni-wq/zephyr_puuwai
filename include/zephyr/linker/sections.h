@@ -63,7 +63,11 @@
 #define _IMX_BOOT_DCD_SECTION_NAME	.boot_hdr.dcd_data
 #define _IMX_BOOT_CONTAINER_SECTION_NAME .boot_hdr.container
 
+#define _ALIF_SRAM0_SECTION_NAME	.alif_sram0
+#define _ALIF_SRAM1_SECTION_NAME	.alif_sram1
 #define _STM32_BACKUP_SRAM_SECTION_NAME	.stm32_backup_sram
+
+#define _ALIF_NS_SECTION_NAME		.alif_ns
 
 #ifdef CONFIG_NOCACHE_MEMORY
 #define _NOCACHE_SECTION_NAME nocache

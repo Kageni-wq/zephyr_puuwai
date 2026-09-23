@@ -5,6 +5,7 @@ zephyr_syscall_header(${ZEPHYR_BASE}/include/zephyr/drivers/comparator.h)
 
 zephyr_library()
 
+zephyr_library_sources_ifdef(CONFIG_COMPARATOR_ALIF_COMP comparator_alif_comp.c)
 zephyr_library_sources_ifdef(CONFIG_USERSPACE comparator_handlers.c)
 
 zephyr_library_include_directories_ifdef(CONFIG_COMPARATOR_INFINEON_HPPASS_CSG ${ZEPHYR_BASE}/drivers/mfd)

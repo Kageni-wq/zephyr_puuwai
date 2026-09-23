@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config PINCTRL_ALIF
+	depends on !ALIF_VENDOR
 	bool "Alif pinctrl driver"
 	default y
 	depends on DT_HAS_ALIF_PINCTRL_ENABLED

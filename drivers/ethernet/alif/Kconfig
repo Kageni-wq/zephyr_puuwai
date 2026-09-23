@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config ETH_DWMAC_ALIF
+	bool "Alif Ensemble DesignWare Ethernet MAC"
+	default y
+	depends on ETH_DRIVER && ALIF_VENDOR && DT_HAS_ALIF_ETHERNET_ENABLED
+	depends on NET_BUF_FIXED_DATA_SIZE
+	select PINCTRL
+	select CLOCK_CONTROL
+	select MDIO
+	select ETH_PHY_DRIVER
+
+if ETH_DWMAC_ALIF
+
+config ETH_DWMAC_PASS_ALL_MULTICAST
+	bool "Pass all multicast frames"
+
+config ALIF_DWMAC_NB_TX_DESCS
+	int "Transmit descriptor count"
+	default 16
+	range 4 128
+
+config ALIF_DWMAC_NB_RX_DESCS
+	int "Receive descriptor count"
+	default 16
+	range 4 128
+
+endif

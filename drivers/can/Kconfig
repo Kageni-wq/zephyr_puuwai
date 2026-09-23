@@ -15,6 +15,7 @@ if CAN
 
 module = CAN
 module-str = CAN
+source "drivers/can/Kconfig.cast"
 source "subsys/logging/Kconfig.template.log_config"
 
 config CAN_INIT_PRIORITY

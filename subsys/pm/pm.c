@@ -70,6 +70,19 @@ static inline void pm_state_notify(bool entering_state)
 	k_spin_unlock(&pm_notifier_lock, pm_notifier_key);
 }
 
+static void pm_state_notify_pre_resume(void)
+{
+	struct pm_notifier *notifier;
+	k_spinlock_key_t key = k_spin_lock(&pm_notifier_lock);
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&pm_notifiers, notifier, _node) {
+		if (notifier->pre_device_resume != NULL) {
+			notifier->pre_device_resume(z_cpus_pm_state[CPU_ID]->state);
+		}
+	}
+	k_spin_unlock(&pm_notifier_lock, key);
+}
+
 static inline int32_t ticks_expiring_sooner(int32_t ticks1, int32_t ticks2)
 {
 	/*
@@ -103,6 +116,7 @@ void pm_system_resume(void)
 	 * complete before the idle thread restores its saved interrupt key.
 	 */
 	if (atomic_test_and_clear_bit(z_post_ops_required, id)) {
+		pm_state_notify_pre_resume();
 #ifdef CONFIG_PM_DEVICE_SYSTEM_MANAGED
 		if (atomic_add(&_cpus_active, 1) == 0) {
 			if ((z_cpus_pm_state[id]->state != PM_STATE_RUNTIME_IDLE) &&

@@ -28,3 +28,5 @@ zephyr_library_sources_ifdef(CONFIG_UDC_SAM_UDP udc_sam_udp.c)
 zephyr_library_sources_ifdef(CONFIG_UDC_SAM_USBC udc_sam_usbc.c)
 zephyr_library_sources_ifdef(CONFIG_UDC_SAM_USBHS udc_sam_usbhs.c)
 zephyr_library_sources_ifdef(CONFIG_UDC_BFLB_V1 udc_bflb_v1.c)
+
+zephyr_library_sources_ifdef(CONFIG_UDC_DWC3 udc_dwc3.c)

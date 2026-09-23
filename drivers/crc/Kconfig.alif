@@ -1,0 +1,21 @@
+# Alif CRC driver configuration options
+
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config CRC_ALIF
+	bool "Alif CRC driver"
+	default y
+	depends on ALIF_VENDOR && DT_HAS_ALIF_ALIF_CRC_ENABLED
+	select CRC_DRIVER_HAS_CRC8
+	select CRC_DRIVER_HAS_CRC8_CCITT
+	select CRC_DRIVER_HAS_CRC16
+	select CRC_DRIVER_HAS_CRC16_REFLECT
+	select CRC_DRIVER_HAS_CRC16_ANSI
+	select CRC_DRIVER_HAS_CRC16_CCITT
+	select CRC_DRIVER_HAS_CRC16_ITU_T
+	select CRC_DRIVER_HAS_CRC32_C
+	select CRC_DRIVER_HAS_CRC32_IEEE
+	select CRC_DRIVER_HAS_CRC32_MPEG2
+	help
+	  Enable driver for Alif CRC

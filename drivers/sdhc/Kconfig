@@ -9,6 +9,7 @@ menuconfig SDHC
 if SDHC
 
 # zephyr-keep-sorted-start
+source "drivers/sdhc/Kconfig.dwc"
 source "drivers/sdhc/Kconfig.ambiq"
 source "drivers/sdhc/Kconfig.ameba"
 source "drivers/sdhc/Kconfig.bflb"
@@ -82,3 +83,9 @@ module-str = sdhc
 source "subsys/logging/Kconfig.template.log_config"
 
 endif # SDHC
+
+config SDHC_RSP_136_HAS_CRC
+	bool "Enable SDHC Response 136 CRC Shifting"
+	default n
+	help
+	  CRC shifting for sdmmc response 136

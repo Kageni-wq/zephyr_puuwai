@@ -87,3 +87,5 @@ zephyr_library_sources_ifdef(CONFIG_PWM_XLNX_AXI_TIMER pwm_xlnx_axi_timer.c)
 zephyr_library_sources_ifdef(CONFIG_PWM_XMC4XXX_CCU4 pwm_xmc4xxx_ccu4.c)
 zephyr_library_sources_ifdef(CONFIG_PWM_XMC4XXX_CCU8 pwm_xmc4xxx_ccu8.c)
 # zephyr-keep-sorted-stop
+
+zephyr_library_sources_ifdef(CONFIG_PWM_ALIF_UTIMER pwm_alif_utimer.c)

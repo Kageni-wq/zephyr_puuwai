@@ -402,3 +402,14 @@ SPDX-License-Identifier = "MIT"
 SPDX-FileComment = "Compiled into the firmware only when the Xtensa reset vector is enabled."
 Zephyr-Description = "Xtensa Startup Assembly Files"
 Zephyr-Kconfig-Condition = "CONFIG_XTENSA_RESET_VECTOR"
+
+[[annotations]]
+path = ["drivers/clock_control/si570/**", "drivers/audio/alif_wm8904/**",
+        "drivers/i2s/i2s_sync/**", "include/zephyr/drivers/i2s_sync.h",
+        "dts/bindings/clock/skyworks,si570.yaml", "dts/bindings/audio/cirrus,wm8904.yaml",
+        "dts/bindings/i2s/alif,i2s-sync.yaml", "dts/bindings/sensor/invensense,ch201.yaml",
+        "modules/Kconfig.alif", "tests/drivers/alif/compile/audio.overlay",
+        "tests/drivers/alif/compile/media.overlay"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright Alif Semiconductor"
+SPDX-License-Identifier = "LicenseRef-Alif-Semiconductor"

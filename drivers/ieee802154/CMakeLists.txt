@@ -37,3 +37,16 @@ zephyr_library_sources_ifdef(CONFIG_IEEE802154_STM32WBA ieee802154_stm32wba.c)
 zephyr_library_sources_ifdef(CONFIG_IEEE802154_TELINK_B91 ieee802154_b91.c)
 zephyr_library_sources_ifdef(CONFIG_IEEE802154_UPIPE ieee802154_uart_pipe.c)
 # zephyr-keep-sorted-stop
+
+zephyr_library_sources_ifdef(CONFIG_IEEE802154_ALIF		ieee802154_alif.c)
+
+if(CONFIG_IEEE802154_ALIF)
+  # Replace the 4.1 UART transport with its current API adapter.
+  set_source_files_properties(
+    ${ZEPHYR_ALIF_MODULE_DIR}/ieee802154/src/alif_ahi.c
+    DIRECTORY ${ZEPHYR_BASE}
+    PROPERTIES HEADER_FILE_ONLY TRUE
+  )
+  zephyr_library_include_directories(${ZEPHYR_ALIF_MODULE_DIR}/ieee802154/src)
+  zephyr_library_sources(alif_ahi.c)
+endif()

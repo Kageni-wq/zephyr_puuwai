@@ -10,6 +10,7 @@ if COMPARATOR
 
 module = COMPARATOR
 module-str = comparator
+rsource "Kconfig.alif_comp"
 source "subsys/logging/Kconfig.template.log_config"
 
 config COMPARATOR_INIT_PRIORITY

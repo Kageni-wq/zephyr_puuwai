@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig UART_NS16550
+	select SERIAL_SUPPORT_ASYNC if ALIF_VENDOR && DT_HAS_ARM_DMA_PL330_ENABLED
 	bool "NS16550 serial driver"
 	default y
 	depends on DT_HAS_NS16550_ENABLED
@@ -130,3 +131,10 @@ config UART_NS16550_WA_TX_FIFO_EMPTY_INTERRUPT
 endmenu
 
 endif # UART_NS16550
+
+config UART_NS16550_FIFO_SIZE
+	int
+	depends on UART_NS16550 && ALIF_VENDOR
+	default 64 if UART_NS16550_VARIANT_NS16750
+	default 128 if UART_NS16550_VARIANT_NS16950
+	default 16

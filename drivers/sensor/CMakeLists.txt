@@ -110,3 +110,5 @@ if(CONFIG_SENSOR_CLOCK_RTC OR CONFIG_SENSOR_CLOCK_COUNTER)
 elseif(CONFIG_SENSOR_CLOCK_SYSTEM)
   zephyr_library_sources(sensor_clock_sys.c)
 endif()
+
+add_subdirectory_ifdef(CONFIG_QDEC_ALIF qdec_alif)

@@ -63,3 +63,5 @@ if(CONFIG_CAN_NATIVE_LINUX)
 endif()
 
 add_subdirectory(transceiver)
+
+zephyr_library_sources_ifdef(CONFIG_CAN_CAST                can_cast.c)

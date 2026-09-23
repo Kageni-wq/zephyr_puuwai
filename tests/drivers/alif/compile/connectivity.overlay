@@ -1,0 +1,15 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Reserve the final 96 KiB of HP DTCM for non-secure DMA buffers. */
+&dtcm { reg = <0x20000000 DT_SIZE_K(928)>; };
+&ns {
+	reg = <0x200e8000 DT_SIZE_K(96)>;
+	status = "okay";
+};
+&ethernet { status = "okay"; };
+&mdio { status = "okay"; };
+&ethernet_phy { status = "okay"; };
+&usb { status = "okay"; };
+&sdhc { status = "okay"; };
+&gpio3 { status = "okay"; };
+&ospi1 { status = "okay"; };
+&ospi_flash { status = "okay"; };

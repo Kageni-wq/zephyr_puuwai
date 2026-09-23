@@ -12,6 +12,7 @@ if PWM
 
 module = PWM
 module-str = pwm
+source "drivers/pwm/Kconfig.alif"
 source "subsys/logging/Kconfig.template.log_config"
 
 config PWM_INIT_PRIORITY

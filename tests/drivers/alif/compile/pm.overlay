@@ -1,0 +1,7 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/ {
+	chosen { zephyr,system-timer-companion = &rtc0; };
+};
+&rtc0 { wakeup-source; };
+
+&standby_s2ram { status = "okay"; };

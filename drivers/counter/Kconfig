@@ -69,6 +69,8 @@ config COUNTER_CALIBRATION
 
 module = COUNTER
 module-str = counter
+source "drivers/counter/Kconfig.alif"
+source "drivers/counter/Kconfig.dw_rtc"
 source "subsys/logging/Kconfig.template.log_config"
 
 # zephyr-keep-sorted-start

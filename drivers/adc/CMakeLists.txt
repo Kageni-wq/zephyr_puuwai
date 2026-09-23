@@ -100,3 +100,5 @@ zephyr_library_sources_ifdef(CONFIG_ADC_VF610 adc_vf610.c)
 zephyr_library_sources_ifdef(CONFIG_ADC_XEC adc_mchp_xec.c)
 zephyr_library_sources_ifdef(CONFIG_ADC_XMC4XXX adc_xmc4xxx.c)
 # zephyr-keep-sorted-stop
+
+zephyr_library_sources_ifdef(CONFIG_ADC_ALIF           adc_alif.c)

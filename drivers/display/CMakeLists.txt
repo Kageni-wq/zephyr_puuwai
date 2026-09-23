@@ -78,3 +78,8 @@ zephyr_library_sources_ifdef(CONFIG_STM32_LTDC display_stm32_ltdc.c)
 zephyr_library_sources_ifdef(CONFIG_UC81XX uc81xx.c)
 zephyr_library_sources_ifdef(CONFIG_WAVESHARE_DSI2DPI display_waveshare_dsi2dpi.c)
 # zephyr-keep-sorted-stop
+
+zephyr_library_sources_ifdef(CONFIG_CDC200		display_cdc200.c)
+zephyr_library_sources_ifdef(CONFIG_MW405		display_mw405.c)
+
+zephyr_library_sources_ifdef(CONFIG_ILI9488_ALIF alif/display_ili9xxx.c alif/display_ili9488.c)

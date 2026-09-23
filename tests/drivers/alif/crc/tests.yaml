@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+tests:
+  drivers.alif.crc:
+    platform_allow:
+      - alif_e7_dk/ae722f80f55d5xx/rtss_hp
+      - alif_e7_dk/ae722f80f55d5xx/rtss_he
+    tags: [drivers, crc, alif]

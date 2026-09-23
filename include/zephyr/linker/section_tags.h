@@ -51,6 +51,9 @@
 #define __ccm_data_section __dtcm_data_section __DEPRECATED_MACRO
 #define __ccm_bss_section __dtcm_bss_section __DEPRECATED_MACRO
 #define __ccm_noinit_section __dtcm_noinit_section __DEPRECATED_MACRO
+#define __alif_ns_section Z_GENERIC_SECTION(_ALIF_NS_SECTION_NAME)
+#define __alif_sram0_section Z_GENERIC_SECTION(_ALIF_SRAM0_SECTION_NAME)
+#define __alif_sram1_section Z_GENERIC_SECTION(_ALIF_SRAM1_SECTION_NAME)
 #endif /* CONFIG_ARM */
 
 #if defined(CONFIG_NOCACHE_MEMORY)

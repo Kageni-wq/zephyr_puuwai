@@ -19,3 +19,5 @@ foreach(module ${kconfig_modules})
 
   set(ZEPHYR_${MODULE_NAME_UPPER}_KCONFIG ${module_dir}/Kconfig)
 endforeach()
+
+include(${CMAKE_CURRENT_LIST_DIR}/alif/compat.cmake)

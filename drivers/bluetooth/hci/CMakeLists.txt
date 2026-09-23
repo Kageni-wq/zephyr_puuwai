@@ -68,3 +68,5 @@ if(CONFIG_BT_USERCHAN)
   zephyr_library_sources(userchan.c)
   target_sources(native_simulator INTERFACE userchan_bottom.c)
 endif()
+
+zephyr_library_sources_ifdef(CONFIG_BT_ALIF        hci_alif.c)

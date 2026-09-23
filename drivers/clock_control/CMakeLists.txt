@@ -190,3 +190,15 @@ if(CONFIG_CLOCK_CONTROL_NRF_COMMON AND NOT (CONFIG_SOC_SERIES_NRF54H OR CONFIG_S
   zephyr_linker_sources(SECTIONS clock_control_nrf_irq_handlers.ld)
   zephyr_iterable_section(NAME clock_control_nrf_irq_handler KVMA RAM_REGION GROUP RODATA_REGION)
 endif()
+
+if(CONFIG_CLOCK_CONTROL_ALIF_SDK)
+  if(CONFIG_SOC_FAMILY_BALLETTO)
+    zephyr_library_sources(clock_control_alif_balletto.c)
+  elseif(CONFIG_SOC_SERIES_E1C)
+    zephyr_library_sources(clock_control_alif_ensemble_e1c.c)
+  else()
+    zephyr_library_sources(clock_control_alif_ensemble.c)
+  endif()
+endif()
+
+add_subdirectory_ifdef(CONFIG_SI570 si570)

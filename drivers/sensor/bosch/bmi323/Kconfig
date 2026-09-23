@@ -25,6 +25,13 @@ menuconfig BMI323
 
 if BMI323
 
+config BMI323_BUS_I3C
+	bool "BMI323 driver support for I3C bus"
+	default y
+	depends on $(dt_compat_on_bus,$(DT_COMPAT_BOSCH_BMI323),i3c)
+	depends on !SENSOR_ASYNC_API
+	select I3C
+
 config BMI323_BUS_SPI
 	bool "BMI323 driver support for SPI bus"
 	default y

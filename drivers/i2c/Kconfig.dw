@@ -55,3 +55,8 @@ config I2C_DW_IC_CLK_FREQ_OPTIMIZATION
 	  reduction feature.
 
 endif # I2C_DW
+
+config I2C_DW_RW_TIMEOUT_MS
+	int "DesignWare I2C transfer timeout (ms)"
+	depends on I2C_DW && ALIF_VENDOR
+	default 100

@@ -5,6 +5,10 @@
 zephyr_library()
 zephyr_library_sources(ethos_u_common.c)
 
+if(CONFIG_ALIF_VENDOR AND CONFIG_CPU_CORTEX_M)
+  zephyr_library_sources(ethos_u_alif.c)
+endif()
+
 # zephyr-keep-sorted-start
 zephyr_library_sources_ifdef(CONFIG_ETHOS_U_ARM ethos_u_arm.c)
 zephyr_library_sources_ifdef(CONFIG_ETHOS_U_INFINEON ethos_u_infineon.c)

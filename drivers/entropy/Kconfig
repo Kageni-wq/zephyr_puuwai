@@ -12,6 +12,7 @@ if ENTROPY_GENERATOR
 
 module = ENTROPY
 module-str = entropy
+source "drivers/entropy/Kconfig.alif"
 source "subsys/logging/Kconfig.template.log_config"
 
 config ENTROPY_INIT_PRIORITY
